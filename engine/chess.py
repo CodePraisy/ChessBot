@@ -2,11 +2,8 @@ from chessEngine import Chess
 
 board = Chess()
 
+board.print_board()
 valid = board.move(1, [6, 5], [5, 5])
-valid = board.move(-1, [1, 4], [3, 4])
-valid = board.move(1, [6, 6], [4, 6])
-valid = board.move(-1, [0, 3], [4, 7])
-
 board.print_board()
 
 if False:

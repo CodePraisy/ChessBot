@@ -1,9 +1,8 @@
 package main;
-import javax.swing.*;
-import java.awt.*;
-
 import handlers.audioHandler;
 import handlers.configHandler;
+import java.awt.*;
+import javax.swing.*;
 
 public class gameMenu extends JPanel {
     public gameMenu(CardLayout cardLayout, JPanel cardPanel, boolean aiMode) {
@@ -277,7 +276,6 @@ public class gameMenu extends JPanel {
                 if (configHandler.getConfigBoolean("soundEffects")) {
                     audioHandler.playClickSound();
                 }
-
             });            
 
             multiplayerGameButtonPanel.add(Box.createVerticalStrut(80)); // spacing

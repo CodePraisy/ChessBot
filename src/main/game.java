@@ -1,9 +1,10 @@
 package main;
-
-import javax.swing.*;
-import java.awt.*;
-
 import components.Board;
+import components.SidePanel;
+import handlers.audioHandler;
+import handlers.configHandler;
+import java.awt.*;
+import javax.swing.*;
 
 public class game extends JPanel {
     public game(CardLayout cardLayout, JPanel cardPanel, int gameType) {
@@ -11,49 +12,79 @@ public class game extends JPanel {
 
         if (gameType == 0) {
             this.setBackground(new Color(227, 220, 193));
-            
-            JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-            wrapper.setOpaque(false); // transparent background to show parent's color
-            
-            JPanel chessContainer = new JPanel();
-            chessContainer.setLayout(new BoxLayout(chessContainer, BoxLayout.Y_AXIS));
-            chessContainer.setMaximumSize(new Dimension(1000, 1000));
-            chessContainer.setOpaque(false); // make transparent to show wrapper bg
 
+            // --- Title: full width, truly centered ---
             JLabel title = new JLabel("Game", SwingConstants.CENTER);
             title.setFont(new Font("Comic Sans MS", Font.BOLD, 60));
-            title.setMaximumSize(new Dimension(Integer.MAX_VALUE, title.getPreferredSize().height));
-            
-            chessContainer.add(title);
-            chessContainer.add(Box.createVerticalStrut(50));
-            
+            title.setOpaque(false);
+            title.setBorder(BorderFactory.createEmptyBorder(24, 0, 16, 0));
+            this.add(title, BorderLayout.NORTH);
+
+            // --- Center content ---
+            JPanel centerPanel = new JPanel();
+            centerPanel.setOpaque(false);
+            centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.X_AXIS));
+
+            // Board
             Board chessBoard = new Board();
-            chessBoard.setMinimumSize(new Dimension(750, 750));
-            chessBoard.setMaximumSize(new Dimension(750, 750));
-       
-            chessContainer.add(chessBoard);
+            chessBoard.setPreferredSize(new Dimension(900, 900));
+            chessBoard.setMinimumSize(new Dimension(900, 900));
+            chessBoard.setMaximumSize(new Dimension(900, 900));
+            chessBoard.setAlignmentY(Component.TOP_ALIGNMENT);
 
-            JPanel sidePanel = new JPanel();
-            sidePanel.setLayout(new BoxLayout(sidePanel, BoxLayout.Y_AXIS));
-            sidePanel.setBackground(new Color(214, 191, 163));
-            sidePanel.setOpaque(true);                // This makes the background paint
-            sidePanel.setPreferredSize(new Dimension(450, 950));
-            sidePanel.setMaximumSize(new Dimension(450, 950));
-            sidePanel.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 3));
+            // Side panel
+            SidePanel sidePanel = new SidePanel();
+            sidePanel.setAlignmentY(Component.TOP_ALIGNMENT);
 
-            JPanel sideWrapper = new JPanel();
-            sideWrapper.setLayout(new BoxLayout(sideWrapper, BoxLayout.Y_AXIS));
-            sideWrapper.setOpaque(false);
-            sideWrapper.add(Box.createVerticalGlue()); // push content to the top
-            sideWrapper.add(Box.createVerticalStrut(5));
-            sideWrapper.add(sidePanel);
-            sideWrapper.add(Box.createVerticalGlue());
+            // Toggle button wrapped vertically so it centers alongside the board
+            JButton toggleBtn = new JButton("◀");
+            toggleBtn.setFont(new Font("Comic Sans MS", Font.BOLD, 8));
+            toggleBtn.setBackground(new Color(89, 83, 67));
+            toggleBtn.setForeground(Color.WHITE);
+            toggleBtn.setFocusPainted(false);
+            toggleBtn.setBorderPainted(false);
+            toggleBtn.setOpaque(true);
+            toggleBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            toggleBtn.setPreferredSize(new Dimension(40, 80));
+            toggleBtn.setMaximumSize(new Dimension(40, 80));
 
-            wrapper.add(chessContainer);
-            wrapper.add(Box.createHorizontalStrut(160)); // space between board and side panel
-            wrapper.add(sideWrapper);
+            JPanel toggleWrapper = new JPanel();
+            toggleWrapper.setOpaque(false);
+            toggleWrapper.setLayout(new BoxLayout(toggleWrapper, BoxLayout.Y_AXIS));
+            toggleWrapper.setAlignmentY(Component.TOP_ALIGNMENT);
+            toggleWrapper.add(Box.createVerticalGlue());
+            toggleWrapper.add(toggleBtn);
+            toggleWrapper.add(Box.createVerticalGlue());
 
-            this.add(wrapper, BorderLayout.CENTER);
+            toggleBtn.addActionListener(e -> {
+                boolean show = !sidePanel.isVisible();
+                
+                if (configHandler.getConfigBoolean("soundEffects")) {
+                    audioHandler.playClickSound();
+                }
+                
+                sidePanel.setVisible(show);
+                toggleBtn.setText(show ? "◀" : "▶");
+                centerPanel.revalidate();
+                centerPanel.repaint();
+            });
+
+            centerPanel.add(Box.createHorizontalGlue());
+            centerPanel.add(chessBoard);
+            centerPanel.add(Box.createHorizontalStrut(12));
+            centerPanel.add(toggleWrapper);
+            centerPanel.add(Box.createHorizontalStrut(12));
+            centerPanel.add(sidePanel);
+            centerPanel.add(Box.createHorizontalGlue());
+
+            // Bottom padding
+            JPanel bottomPad = new JPanel();
+            bottomPad.setOpaque(false);
+            bottomPad.setPreferredSize(new Dimension(0, 24));
+
+            this.add(centerPanel, BorderLayout.CENTER);
+            this.add(bottomPad, BorderLayout.SOUTH);
+
         } else {
             // AI game components
         }

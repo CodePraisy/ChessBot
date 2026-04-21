@@ -1,12 +1,14 @@
 import time
 import random
 import numpy
+import copy
 
 from pieces import *
 
 class Chess:
     def __init__(self): 
-        self.board = numpy.array([[Piece() for i in range(8)] for j in range(8)])
+        self.board = [[Piece() for _ in range(8)] for _ in range(8)]
+        self.record = []
         self.turn = 1  #1 for white, -1 for black
         self.moves = 0
         self.gameID = random.randrange(0, 1000000000000)
@@ -44,6 +46,8 @@ class Chess:
             
             self.board[0][i] = blackPiece  # Black pieces
             self.board[7][i] = whitePiece  # White pieces
+        
+        self.record.append(self.board.copy())
 
     def move(self, player, current_posistion, new_position, ghost_move=False, promote=Piece):
         start_time = time.perf_counter()
@@ -77,11 +81,31 @@ class Chess:
             
             if checkmate:
                 self.status = player
-
+        
+        self.record.append(self.board.copy())
         print(f"Execution time: {time.perf_counter() - start_time} seconds")
 
         return valid
     
+    def undo_move(self):
+        if len(self.record) > 1:
+            self.record.pop()
+            self.board = copy.deepcopy(self.record[-1])
+            self.turn *= -1
+            self.moves -= 1 
+            self.status = 0
+
+    def get_possible_moves(self, piece_location):
+        piece = self.board[piece_location[0]][piece_location[1]]      
+        possible_moves = []
+
+        for i in range(8):
+            for j in range(8):
+                if piece.move(self.board, [i, j], ghost_move=True):
+                    possible_moves.append([i, j])
+
+        return possible_moves
+
     def checkmate(self, player, checking_piece):
         check = False
         checkmate = False
