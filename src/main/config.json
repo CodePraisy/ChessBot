@@ -1,0 +1,30 @@
+{
+    "botName": "ChessBot",
+    "version": "1.0.0",
+    "author": "Praise Onuoha",
+    "saves": {
+        "saveState": true,
+        "useSaveState": true
+    },
+
+    "mapping": {
+        "pawn": [1, "p", 1],
+        "knight": [2, "n", 3],
+        "bishop": [3, "b", 3],
+        "rook": [4, "r", 5],
+        "queen": [5, "q", 7],
+        "king": [6, "k", 100]
+    }, 
+    
+    "chessPieces": "./chessPieces/256px",
+    
+    "audio": {
+        "soundEffects": true,
+        "backgroundMusic": true
+    },
+
+    "logging": {
+        "enabled": true,
+        "logFilePath": "/path/to/logfile.log"
+    }
+}
