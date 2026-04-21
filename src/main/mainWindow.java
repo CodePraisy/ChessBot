@@ -1,11 +1,9 @@
 package main;
-import javax.swing.*;
-
 import handlers.audioHandler;
 import handlers.configHandler;
-
+import handlers.utilities;
 import java.awt.*;
-import java.net.URI;
+import javax.swing.*;
 
 public class mainWindow extends JFrame {
     private CardLayout cardLayout;
@@ -151,11 +149,7 @@ public class mainWindow extends JFrame {
                 audioHandler.playClickSound();
             }
 
-            try {
-                Desktop.getDesktop().browse(new URI("https://github.com/CodePraisy")); // Replace with real URL
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
+            utilities.openURL("https://github.com/CodePraisy");
         });
 
         JLabel versionLabel = new JLabel(configHandler.loadVersion(), SwingConstants.CENTER);
@@ -180,4 +174,4 @@ public class mainWindow extends JFrame {
     }
 }
     
- 
+

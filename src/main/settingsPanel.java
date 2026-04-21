@@ -1,11 +1,9 @@
 package main;
-import javax.swing.*;
-
 import handlers.audioHandler;
 import handlers.configHandler;
-
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import javax.swing.*;
 
 public class settingsPanel extends JPanel {
     private boolean canSave = false;
