@@ -47,8 +47,8 @@ public final class style {
                 new Color(96, 50, 62), new Color(60, 28, 38), new Color(252, 244, 246), new Color(244, 232, 236), new Color(70, 40, 50)));
     }
 
-    /** Bundled fonts (src/assets/fonts, SIL Open Font License) plus the original Comic Sans. */
-    public static final String[] FONTS = {"Nunito", "Poppins", "Fredoka", "Comic Sans MS"};
+    /** Bundled display fonts plus reliable system and Java logical fonts for more visual variety. */
+    public static final String[] FONTS = {"Nunito", "Poppins", "Fredoka", "Segoe UI", "Trebuchet MS", "Georgia", "Verdana", "Tahoma", "Comic Sans MS", "SansSerif", "Serif", "Monospaced"};
 
     public static theme current = THEMES.get("Light");
     public static String FONT = "Nunito";
@@ -91,9 +91,11 @@ public final class style {
 
     /** House font. Bundled fonts have no italic face, so italic requests are drawn upright for a cleaner look. */
     public static Font font(int style, int size) {
-        int s = FONT.equals("Comic Sans MS") ? style : style & ~Font.ITALIC;
+        int s = isBundledFont(FONT) ? style & ~Font.ITALIC : style;
         return new Font(FONT, s, size);
     }
+
+    private static boolean isBundledFont(String name) { return name.equals("Nunito") || name.equals("Poppins") || name.equals("Fredoka"); }
 
     /** Heavier face for big titles where the font has one. */
     public static Font titleFont(int size) {

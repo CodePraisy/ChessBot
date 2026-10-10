@@ -26,6 +26,11 @@ public final class engineRegistry {
         if (p != null && !all.contains(p)) all.add(p);
     }
 
+    /** Makes an engine selectable in AI vs AI without changing the default Player vs AI model. */
+    public static synchronized void addEngine(moveProvider p) {
+        if (p != null && !all.contains(p)) all.add(p);
+    }
+
     public static synchronized void registerAnalysis(analysisProvider a) { analysis = a; }
 
     public static synchronized moveProvider forColor(int color) { return color == Position.WHITE ? white : black; }

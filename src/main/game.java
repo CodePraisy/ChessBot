@@ -163,6 +163,7 @@ public class game extends JPanel {
             save.blackName = setup.humanColor() == Position.BLACK ? "You" : engine;
             save.settings.put("humanColor", setup.humanColor() == Position.WHITE ? "white" : "black");
             save.settings.put("skill", (long) setup.skill());
+            if (setup.aiEngine() != null) save.settings.put("aiEngine", setup.aiEngine());
         } else if (isAiVsAi()) {
             save.whiteName = setup.whiteEngine();
             save.blackName = setup.blackEngine();
@@ -182,6 +183,10 @@ public class game extends JPanel {
 
     private moveProvider providerFor(int color) {
         if (isAiVsAi()) return engineRegistry.byName(color == Position.WHITE ? setup.whiteEngine() : setup.blackEngine());
+        if (isAi() && setup.aiEngine() != null) {
+            moveProvider chosen = engineRegistry.byName(setup.aiEngine());
+            if (chosen != null) return chosen;
+        }
         return engineRegistry.forColor(color);
     }
 

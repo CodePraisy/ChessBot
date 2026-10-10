@@ -264,7 +264,6 @@ public class mainWindow extends JFrame {
     public static void showNoEngineDialog(Component parent) {
         style.info(parent, "No engine connected",
                 "<html><div style='width:420px'><b>No chess engine is connected yet.</b><br><br>"
-                + "The AI engine plugs in with one line in <i>src/ai/engineBootstrap.java</i> (see <i>docs/ENGINE_HOOK.md</i>).<br><br>"
-                + "To try these screens now, launch the app with the <i>--dev-engine</i> flag, which plays random legal moves.</div></html>");
+                + "The built-in models are registered in <i>src/ai/engineBootstrap.java</i>. If this message appears, check that application startup completed normally.</div></html>");
     }
 }

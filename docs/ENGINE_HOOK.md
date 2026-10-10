@@ -1,6 +1,6 @@
 # Engine hook
 
-The UI is finished without an engine. An engine plugs in through two interfaces in `src/ai/`, and the rules layer (`src/rules/`) checks every move it returns.
+The app includes three playable Java chess models: **Atlas** (balanced), **Blitz** (attacking), and **Bastion** (positional). They can be selected in Player vs AI or paired in AI vs AI. An external engine plugs in through two interfaces in `src/ai/`, and the rules layer (`src/rules/`) checks every move it returns.
 
 ## Plugging an engine in (one line)
 
@@ -12,7 +12,7 @@ engineRegistry.useEngine(new externalProcessProvider("ChessBot TF", "engine/venv
 
 `useEngine` registers the engine to play both colours. If the engine also implements `analysisProvider`, it is used for hints and review as well (`externalProcessProvider` implements both). The command runs from the project root. `engine/bridge.py` doesn't exist yet: it's the small script you'll write that speaks the contract below.
 
-Until then, launch with `--dev-engine` (random legal moves and fake suggestions) or `--dev-engine=flaky` (sometimes returns an illegal move, crashes or times out). Delete `devRandomEngine.java` and its line in `engineBootstrap` when you no longer need them.
+The built-in models need no setup. `devRandomEngine.java` remains a test fixture for simulated engine failures.
 
 ## The Java side
 

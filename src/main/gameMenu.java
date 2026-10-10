@@ -107,14 +107,20 @@ public class gameMenu extends JPanel {
         p.add(style.label("Play as:", Font.BOLD, 20));
         JComboBox<String> colour = new JComboBox<>(new String[]{"White", "Black", "Random"});
         p.add(colour);
+        List<moveProvider> providers = engineRegistry.providers();
+        String[] models = providers.stream().map(moveProvider::name).toArray(String[]::new);
+        p.add(style.label("AI model:", Font.BOLD, 20));
+        JComboBox<String> model = new JComboBox<>(models);
+        p.add(model);
         p.add(style.label("Difficulty (1-10):", Font.BOLD, 20));
         JSlider skill = skillSlider();
         p.add(skill);
         style.deepFont(colour, style.font(Font.PLAIN, 18));
+        style.deepFont(model, style.font(Font.PLAIN, 18));
         if (style.choose(this, "Player vs AI", p, "Start", "Cancel") != 0) return;
         int c = colour.getSelectedIndex() == 0 ? Position.WHITE : colour.getSelectedIndex() == 1 ? Position.BLACK
                 : (Math.random() < 0.5 ? Position.WHITE : Position.BLACK);
-        window.startGame(gameSetup.vsAi(c, skill.getValue()));
+        window.startGame(gameSetup.vsAi(c, skill.getValue(), (String) model.getSelectedItem()));
     }
 
     private void startAIvsAI() {
