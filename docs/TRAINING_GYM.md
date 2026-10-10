@@ -15,6 +15,10 @@ python -m venv engine/venv
 
 On macOS/Linux, use `engine/venv/bin/python` instead of the Windows interpreter path.
 The gym needs NumPy and python-chess; it runs on a CPU without TensorFlow or a GPU.
+Self-play and tournament games use up to four worker processes by default. Each
+worker uses one BLAS thread unless you override the thread environment variables.
+Use `--workers 1` to use less CPU, or `--workers 6` to try all six cores on a
+6-core machine. Worker startup happens once per launch, not once per generation.
 
 ## What happens each generation
 
@@ -45,6 +49,12 @@ Increase tournament rounds for more reliable survivor selection.
 # Longer matches and more evaluation games per model
 .\engine\venv\Scripts\python.exe engine\train_gym.py --generations 100 --max-plies 300 --tournament-rounds 5
 
+# Explicitly use four parallel games (the default on machines with 4+ CPUs)
+.\engine\venv\Scripts\python.exe engine\train_gym.py --generations 100 --workers 4
+
+# Short speed benchmark with disposable models; does not publish a generation
+.\engine\venv\Scripts\python.exe engine\benchmark_gym.py --games 16 --workers 4
+
 # Show survivors without starting training
 .\engine\venv\Scripts\python.exe engine\train_gym.py --status
 
@@ -60,6 +70,19 @@ the next invocation resumes the last completed generation, including the replay 
 and random generator state. An unfinished generation is repeated. No production
 checkpoints are created by `--verify` or `--status`: tests use temporary files, scripted
 matches and one tiny synthetic gradient correctness check.
+Parallel verification also checks two four-ply games with disposable models. The
+benchmark plays a fixed set of short games and times one disposable synthetic fit;
+it never opens or writes your saved gym. Its generation estimate depends on game
+lengths and excludes checkpoint saving. Actual training prints separate self-play,
+learning and tournament timings.
+
+The optimized move picker tracks repetition counts instead of replaying the whole
+history for every candidate move. It preserves claimable draws, including claims
+available on the next legal move. Board features and checkpoint format are unchanged,
+so existing survivors and replay data still resume normally. Games receive separate
+random seeds and results are applied in scheduled order, making worker count
+independent of results for the same starting state and settings. The new scheduling
+uses random numbers differently from older trainer versions.
 
 Only one trainer can write to a gym at once. A hard process kill can leave a
 `training.lock` file; confirm the trainer is no longer running before removing that file.

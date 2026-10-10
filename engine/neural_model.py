@@ -21,9 +21,11 @@ for color in range(2):
 
 def encode(board: chess.Board) -> np.ndarray:
     x = np.zeros(FEATURES, dtype=np.float32)
-    for sq, piece in board.piece_map().items():
-        plane = (0 if piece.color == chess.WHITE else 6) + piece.piece_type - 1
-        x[plane * 64 + sq] = 1
+    for color in (chess.WHITE, chess.BLACK):
+        for piece_type in chess.PIECE_TYPES:
+            start = ((0 if color else 6) + piece_type - 1) * 64
+            for sq in chess.scan_forward(board.pieces_mask(piece_type, color)):
+                x[start + sq] = 1
     x[768] = 1 if board.turn else -1
     x[769:773] = (board.has_kingside_castling_rights(chess.WHITE),
                   board.has_queenside_castling_rights(chess.WHITE),

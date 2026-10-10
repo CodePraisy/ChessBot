@@ -8,7 +8,9 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 import argparse
 from dataclasses import dataclass, field
+from concurrent.futures import ProcessPoolExecutor
 import json
+import signal
 from pathlib import Path
 import tempfile
 import time
@@ -19,6 +21,7 @@ import numpy as np
 
 from ai_models import ChessModel
 from neural_model import FEATURES, ValueNetwork, encode
+from repetition import RepetitionTracker
 
 SURVIVORS = 10
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "models" / "gym"
@@ -60,16 +63,19 @@ def play_game(white: Candidate, black: Candidate, rng, max_plies: int,
     board = start.copy(stack=True) if start is not None else opening(rng)
     models = {chess.WHITE: ChessModel(white.network), chess.BLACK: ChessModel(black.network)}
     positions = []
+    repetitions = RepetitionTracker(board)
     for _ in range(max_plies):
-        if board.is_game_over(claim_draw=True):
+        if repetitions.outcome(board) is not None:
             break
         if record:
             positions.append(encode(board))
-        move = models[board.turn].quick_move(board, rng if exploration else None, exploration)
+        move = models[board.turn].quick_move(board, rng if exploration else None, exploration,
+                                           repetitions=repetitions)
         if move is None or move not in board.legal_moves:
             raise RuntimeError("Model returned an invalid move")
         board.push(move)
-    result = board.outcome(claim_draw=True)
+        repetitions.add(board)
+    result = repetitions.outcome(board)
     if result is None:
         outcome, reason = 0.0, "ply limit (draw)"
     else:
@@ -157,39 +163,70 @@ def populate(winners, size, next_id, rng, mutation):
     return population, next_id
 
 
-def generation_step(population, elite_count, args, rng, replay_x, replay_y, log):
+def play_job(job):
+    white, black, seed, max_plies, exploration, start, record = job
+    return play_game(white, black, np.random.default_rng(seed), max_plies,
+                     exploration=exploration, start=start, record=record)
+
+
+def worker_init():
+    # Let the parent handle Ctrl+C and release the writer lock after workers finish.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def game_jobs(population, pairs, args, rng, exploration=0, record=False):
+    return [(population[a], population[b], int(rng.integers(2**63)), args.max_plies,
+             exploration, start, record) for a, b, start in pairs]
+
+
+def generation_step(population, elite_count, args, rng, replay_x, replay_y, log, executor=None):
+    started = time.perf_counter()
     new_x, new_y = [], []
-    for game in range(args.training_games):
+    pairs = []
+    for _ in range(args.training_games):
         a, b = rng.choice(len(population), 2, replace=False)
-        result = play_game(population[a], population[b], rng, args.max_plies,
-                           exploration=args.exploration, record=True)
+        pairs.append((a, b, None))
+    jobs = game_jobs(population, pairs, args, rng, args.exploration, True)
+    results = executor.map(play_job, jobs) if executor else map(play_job, jobs)
+    for game, ((a, b, _), result) in enumerate(zip(pairs, results)):
         new_x.extend(result.positions)
         new_y.extend([result.outcome] * len(result.positions))
         log("self-play", game + 1, population[a], population[b], result)
+    print(f"  Self-play: {args.training_games} games in {time.perf_counter()-started:.2f}s", flush=True)
     if new_x:
         replay_x = np.concatenate((replay_x, np.stack(new_x)))[-args.replay_size:]
         replay_y = np.concatenate((replay_y, np.asarray(new_y, np.float32)))[-args.replay_size:]
     if not len(replay_x):
         raise RuntimeError("Self-play produced no trainable positions")
+    started = time.perf_counter()
     for model in population[elite_count:]:
         indices = rng.choice(len(replay_x), min(len(replay_x), args.samples_per_model), replace=False)
         loss = model.network.fit(replay_x[indices], replay_y[indices], rng,
                                  epochs=args.epochs, learning_rate=args.learning_rate)
         model.metadata["trained_positions"] += len(indices) * args.epochs
         print(f"  Learned {model.id}: loss={loss:.4f}, examples={len(indices)}", flush=True)
+    print(f"  Learning: {len(population)-elite_count} models in {time.perf_counter()-started:.2f}s", flush=True)
     # Evaluation has no exploration or weight updates. Each pairing uses both colours
     # and the same opening, so every candidate plays an equal number of games.
     match = 0
+    started = time.perf_counter()
+    pairs = []
     for _ in range(args.tournament_rounds):
         order = rng.permutation(len(population))
         for index in range(0, len(order), 2):
-            a, b = population[order[index]], population[order[index + 1]]
+            a, b = int(order[index]), int(order[index + 1])
             start = opening(rng)
             for white, black in ((a, b), (b, a)):
-                result = play_game(white, black, rng, args.max_plies, start=start)
-                record_score(white, black, result.outcome)
-                match += 1
-                log("tournament", match, white, black, result)
+                pairs.append((white, black, start))
+    jobs = game_jobs(population, pairs, args, rng)
+    results = executor.map(play_job, jobs) if executor else map(play_job, jobs)
+    for a_b, result in zip(pairs, results):
+        a, b, _ = a_b
+        white, black = population[a], population[b]
+        record_score(white, black, result.outcome)
+        match += 1
+        log("tournament", match, white, black, result)
+    print(f"  Tournament: {match} games in {time.perf_counter()-started:.2f}s", flush=True)
     return select_survivors(population), replay_x, replay_y
 
 
@@ -202,9 +239,12 @@ def train(args):
     except FileExistsError:
         raise RuntimeError(f"Gym is already running, or an interrupted run left {lock}. Check before removing it.")
     os.close(fd)
+    executor = None
     try:
+        if args.workers > 1:
+            executor = ProcessPoolExecutor(max_workers=args.workers, initializer=worker_init)
         winners, generation, next_id, rng, x, y = load_state(output, args.seed)
-        print(f"Chess training gym | {args.population} candidates | top {SURVIVORS} survive")
+        print(f"Chess training gym | {args.population} candidates | top {SURVIVORS} survive | {args.workers} workers")
         print(f"Output: {output}\nResuming generation {generation}. Ctrl+C stops; restart resumes the last completed generation.")
         for _ in range(args.generations):
             generation += 1
@@ -217,7 +257,7 @@ def train(args):
                     history.write(json.dumps({"generation": generation, "stage": stage, "white": white.id,
                         "black": black.id, "outcome": result.outcome, "reason": result.reason, "moves": result.moves}) + "\n")
                     history.flush()
-                winners, x, y = generation_step(population, len(winners), args, rng, x, y, log)
+                winners, x, y = generation_step(population, len(winners), args, rng, x, y, log, executor)
             publish(output, generation, winners, next_id, rng, x, y)
             print(f"\n  Top 10 saved ({time.perf_counter()-started:.1f}s). Replay: {len(y)} positions")
             for rank, model in enumerate(winners, 1):
@@ -226,6 +266,8 @@ def train(args):
     except KeyboardInterrupt:
         print("\nStopped. Last completed generation is saved; unfinished generation will be repeated.")
     finally:
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=True)
         lock.unlink(missing_ok=True)
 
 
@@ -243,6 +285,8 @@ def parser():
     p.add_argument("--mutation", type=float, default=0.01)
     p.add_argument("--exploration", type=float, default=0.1)
     p.add_argument("--seed", type=int, default=42, help="used only when starting a new gym")
+    p.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1),
+                   help="parallel self-play processes (default: up to 4; 1 for serial)")
     p.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     p.add_argument("--status", action="store_true", help="show saved survivors without training")
     p.add_argument("--verify", action="store_true", help="run isolated tests, without a training run")
@@ -267,7 +311,7 @@ def main():
         return
     if args.population <= SURVIVORS or args.population % 2:
         p.error("--population must be even and greater than 10")
-    for name in ("generations", "training_games", "tournament_rounds", "max_plies", "epochs", "samples_per_model", "replay_size"):
+    for name in ("generations", "training_games", "tournament_rounds", "max_plies", "epochs", "samples_per_model", "replay_size", "workers"):
         if getattr(args, name) <= 0:
             p.error(name.replace("_", "-") + " must be positive")
     if not 0 <= args.exploration <= 1 or not np.isfinite(args.mutation) or args.mutation < 0:

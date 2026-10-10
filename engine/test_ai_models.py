@@ -11,12 +11,14 @@ from unittest.mock import patch
 
 import chess
 import numpy as np
+from concurrent.futures import ProcessPoolExecutor
 
 from ai_models import ChessModel, SearchStopped
 from bridge import handle, move_form
 from neural_model import FEATURES, ValueNetwork, encode
+from repetition import RepetitionTracker
 from train_gym import (Candidate, GameResult, generation_step, load_state, parser,
-                       play_game, populate, publish, record_score, select_survivors, train)
+                       play_game, play_job, populate, publish, record_score, select_survivors, train)
 
 
 class GymTests(unittest.TestCase):
@@ -32,6 +34,90 @@ class GymTests(unittest.TestCase):
         self.assertEqual(-1, x[768])
         self.assertEqual(1, x[777])  # e-file en passant
         self.assertTrue(np.all(x[769:773] == 1))
+
+    def test_fast_encoding_matches_piece_map_reference(self):
+        board = chess.Board()
+        for _ in range(80):
+            expected = encode(board)
+            expected[:768] = 0
+            for sq, piece in board.piece_map().items():
+                plane = (0 if piece.color else 6) + piece.piece_type - 1
+                expected[plane * 64 + sq] = 1
+            np.testing.assert_array_equal(expected, encode(board))
+            legal = list(board.legal_moves)
+            if not legal:
+                break
+            board.push(legal[int(self.rng.integers(len(legal)))])
+
+    def test_incremental_outcomes_match_chess_including_claims(self):
+        boards = [chess.Board(fen) for fen in (
+            chess.STARTING_FEN,
+            "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1",
+            "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
+            "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1",
+            "7k/8/6K1/8/8/8/8/8 w - - 0 1",
+            "7k/8/6K1/8/8/8/8/R7 w - - 99 1",
+            "7k/8/6K1/8/8/8/8/R7 w - - 100 1",
+            "7k/8/6K1/8/8/8/8/R7 w - - 150 1",
+            "4k3/8/8/3pP3/8/8/8/4K2R w - d6 0 1")]
+        repeated = chess.Board()
+        for move in ["g1f3", "g8f6", "f3g1", "f6g8"] * 4:
+            repeated.push_uci(move)
+            boards.append(repeated.copy())
+        for board in boards:
+            tracker = RepetitionTracker(board)
+            self.assertEqual(board.outcome(claim_draw=True), tracker.outcome(board))
+            before = dict(tracker.counts), tracker.repeated, board.fen(), list(board.move_stack)
+            for move in list(board.legal_moves):
+                board.push(move)
+                key = tracker.add(board)
+                self.assertEqual(board.outcome(claim_draw=True), tracker.outcome(board))
+                tracker.remove(key)
+                board.pop()
+            self.assertEqual(before, (dict(tracker.counts), tracker.repeated, board.fen(), list(board.move_stack)))
+        board = chess.Board()
+        tracker = RepetitionTracker(board)
+        for _ in range(120):
+            self.assertEqual(board.outcome(claim_draw=True), tracker.outcome(board))
+            legal = list(board.legal_moves)
+            if not legal:
+                break
+            board.push(legal[int(self.rng.integers(len(legal)))])
+            tracker.add(board)
+
+    def test_parallel_games_match_serial_with_fixed_seeds(self):
+        population, _ = populate([], 12, 1, self.rng, 0.01)
+        jobs = [(population[0], population[1], seed, 4, 0.1, None, True)
+                for seed in (7, 8)]
+        serial = list(map(play_job, jobs))
+        with ProcessPoolExecutor(max_workers=2) as executor:
+            parallel = list(executor.map(play_job, jobs))
+        for a, b in zip(serial, parallel):
+            self.assertEqual((a.moves, a.outcome, a.reason), (b.moves, b.outcome, b.reason))
+            np.testing.assert_array_equal(a.positions, b.positions)
+
+    def test_parallel_generation_matches_serial_selection_and_replay(self):
+        args = parser().parse_args(["--population", "12", "--training-games", "1",
+                                   "--tournament-rounds", "1", "--max-plies", "2"])
+        outputs, states = [], []
+        with ProcessPoolExecutor(max_workers=2) as executor:
+            for pool in (None, executor):
+                rng = np.random.default_rng(99)
+                population, _ = populate([], 12, 1, rng, 0.01)
+                protected = population[0].network.w1.copy()
+                x, y = np.empty((0, FEATURES), np.float32), np.empty(0, np.float32)
+                with patch.object(ValueNetwork, "fit", return_value=0.0) as fit, \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    winners, x, y = generation_step(population, 10, args, rng, x, y,
+                                                     lambda *a: None, pool)
+                self.assertEqual(2, fit.call_count)
+                np.testing.assert_array_equal(protected, population[0].network.w1)
+                outputs.append(([m.metadata for m in winners], x, y))
+                states.append(rng.bit_generator.state)
+        self.assertEqual(outputs[0][0], outputs[1][0])
+        np.testing.assert_array_equal(outputs[0][1], outputs[1][1])
+        np.testing.assert_array_equal(outputs[0][2], outputs[1][2])
+        self.assertEqual(states[0], states[1])
 
     def test_synthetic_gradient_changes_weights_and_reduces_loss(self):
         # A tiny numerical correctness check, not self-play or production training.
@@ -151,7 +237,7 @@ class GymTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / "isolated-gym"
             args = parser().parse_args(["--output", str(root), "--population", "12",
-                "--generations", "1", "--training-games", "1", "--tournament-rounds", "1"])
+                "--generations", "1", "--training-games", "1", "--tournament-rounds", "1", "--workers", "1"])
             with patch("train_gym.play_game", return_value=fixture), \
                     patch.object(ValueNetwork, "fit", return_value=0.0), \
                     contextlib.redirect_stdout(io.StringIO()):

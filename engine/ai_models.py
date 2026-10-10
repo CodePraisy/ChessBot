@@ -8,6 +8,7 @@ import chess
 import numpy as np
 
 from neural_model import ValueNetwork, encode
+from repetition import RepetitionTracker
 
 MATE_SCORE = 100_000
 
@@ -21,7 +22,8 @@ class ChessModel:
         self.network, self.name = network, name
 
     def quick_move(self, board: chess.Board, rng: np.random.Generator | None = None,
-                   exploration: float = 0.0) -> chess.Move | None:
+                   exploration: float = 0.0,
+                   repetitions: RepetitionTracker | None = None) -> chess.Move | None:
         """Batch one-ply inference keeps terminal self-play practical on a CPU."""
         moves = list(board.legal_moves)
         if not moves:
@@ -29,16 +31,20 @@ class ChessModel:
         if rng is not None and rng.random() < exploration:
             return moves[int(rng.integers(len(moves)))]
         mover = 1 if board.turn else -1
+        repetitions = repetitions or RepetitionTracker(board)
         features, terminal = [], {}
         for i, move in enumerate(moves):
             board.push(move)
+            key = repetitions.add(board)
             try:
                 features.append(encode(board))
-                if board.is_checkmate():
+                result = repetitions.outcome(board)
+                if result is not None and result.termination == chess.Termination.CHECKMATE:
                     return move
-                if board.is_game_over(claim_draw=True):
+                if result is not None:
                     terminal[i] = 0.0
             finally:
+                repetitions.remove(key)
                 board.pop()
         scores = self.network.predict(np.stack(features)) * mover
         for i, score in terminal.items():
