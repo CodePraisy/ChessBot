@@ -1,0 +1,3 @@
+# Minimal dependencies for self-play, neural training and Java's Python bridge.
+chess==1.11.2
+numpy==2.4.4

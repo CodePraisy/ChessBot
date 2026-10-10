@@ -1,18 +1,18 @@
 # Engine hook
 
-The app includes three playable Python chess models: **Atlas** (balanced), **Blitz** (attacking), and **Bastion** (positional). They can be selected in Player vs AI or paired in AI vs AI. Java starts one Python process for each model and communicates through the JSON-lines bridge in `engine/bridge.py`.
+The Python training gym learns chess evaluators from self-play and retains its best ten models. Java discovers the saved survivor manifest and starts one Python inference process per checkpoint. See [TRAINING_GYM.md](TRAINING_GYM.md) for commands, training controls and checkpoint details.
 
 ## Plugging an engine in (one line)
 
-The models are registered in `src/ai/engineBootstrap.java`:
+Survivors are loaded in `src/ai/engineBootstrap.java` from `engine/models/gym/champions.json`. The equivalent registration for a single checkpoint is:
 
 ```java
-engineRegistry.useEngine(new externalProcessProvider("Atlas — Balanced", "engine/venv/Scripts/python.exe", "engine/bridge.py", "--model", "atlas"));
+engineRegistry.useEngine(new externalProcessProvider("model-000012", "engine/venv/Scripts/python.exe", "engine/bridge.py", "--checkpoint", "path/to/model-000012.npz"));
 ```
 
-`useEngine` registers the engine to play both colours. If the engine also implements `analysisProvider`, it is used for hints and review as well (`externalProcessProvider` implements both). The command runs from the project root. `bridge.py` uses `python-chess` for full legal move generation and `ai_models.py` for the model-specific alpha-beta search and evaluation.
+`useEngine` registers the engine to play both colours. If the engine also implements `analysisProvider`, it is used for hints and review as well (`externalProcessProvider` implements both). The command runs from the project root. `bridge.py` uses python-chess for full legal move generation and `ai_models.py` for alpha-beta search with the learned neural evaluator. Search interruption always restores the board, and the bridge can cancel requests while searching.
 
-Install the Python requirements once with `engine/venv/Scripts/python.exe -m pip install -r engine/reqiurements.txt` on Windows. `devRandomEngine.java` remains a Java test fixture for simulated engine failures.
+Install the minimal runtime with `engine/venv/Scripts/python.exe -m pip install -r engine/requirements-gym.txt` on Windows. Run `engine/train_gym.py` yourself to create models. `devRandomEngine.java` remains a Java test fixture for simulated engine failures.
 
 ## The Java side
 

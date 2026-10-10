@@ -1,45 +1,15 @@
-"""Small searchable chess models used by bridge.py.
-
-The Java application remains the rules authority, while these Python models use the
-same FEN position to search only legal moves. Each model shares alpha-beta search and
-has its own evaluation weights, so its play style is meaningfully different.
-"""
-
+"""Legal chess search using the gym's learned value network."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 import time
-from typing import Iterable
+from threading import Event
 
 import chess
+import numpy as np
+
+from neural_model import ValueNetwork, encode
 
 MATE_SCORE = 100_000
-PIECE_VALUE = {
-    chess.PAWN: 100,
-    chess.KNIGHT: 320,
-    chess.BISHOP: 330,
-    chess.ROOK: 500,
-    chess.QUEEN: 900,
-    chess.KING: 0,
-}
-
-
-@dataclass(frozen=True)
-class ModelProfile:
-    key: str
-    name: str
-    description: str
-    center_weight: int
-    pawn_advance_weight: int
-    king_safety_weight: int
-    check_bonus: int
-
-
-MODELS = {
-    "atlas": ModelProfile("atlas", "Atlas — Balanced", "Balanced", 6, 7, 24, 80),
-    "blitz": ModelProfile("blitz", "Blitz — Attacking", "Attacking", 13, 10, 12, 180),
-    "bastion": ModelProfile("bastion", "Bastion — Positional", "Positional", 5, 5, 42, 65),
-}
 
 
 class SearchStopped(Exception):
@@ -47,127 +17,102 @@ class SearchStopped(Exception):
 
 
 class ChessModel:
-    def __init__(self, profile: ModelProfile):
-        self.profile = profile
+    def __init__(self, network: ValueNetwork, name: str = "Untrained model"):
+        self.network, self.name = network, name
 
-    def choose(self, board: chess.Board, skill: int, time_ms: int) -> tuple[chess.Move | None, int, int]:
+    def quick_move(self, board: chess.Board, rng: np.random.Generator | None = None,
+                   exploration: float = 0.0) -> chess.Move | None:
+        """Batch one-ply inference keeps terminal self-play practical on a CPU."""
+        moves = list(board.legal_moves)
+        if not moves:
+            return None
+        if rng is not None and rng.random() < exploration:
+            return moves[int(rng.integers(len(moves)))]
+        mover = 1 if board.turn else -1
+        features, terminal = [], {}
+        for i, move in enumerate(moves):
+            board.push(move)
+            try:
+                features.append(encode(board))
+                if board.is_checkmate():
+                    return move
+                if board.is_game_over(claim_draw=True):
+                    terminal[i] = 0.0
+            finally:
+                board.pop()
+        scores = self.network.predict(np.stack(features)) * mover
+        for i, score in terminal.items():
+            scores[i] = score
+        return moves[int(np.argmax(scores))]
+
+    def choose(self, board: chess.Board, skill: int, time_ms: int,
+               stop: Event | None = None) -> tuple[chess.Move | None, int, int]:
         legal = list(board.legal_moves)
         if not legal:
             return None, 0, 0
-        deadline = time.perf_counter() + max(0.25, (time_ms - 100) / 1000)
-        best_move, best_score, completed_depth = legal[0], 0, 0
-        for depth in range(1, self._depth_for(skill) + 1):
+        deadline = time.perf_counter() + max(0.001, (time_ms - 50) / 1000)
+        best, score, completed = legal[0], 0, 0
+        for depth in range(1, min(4, 1 + (max(1, min(10, skill)) - 1) // 3) + 1):
             try:
-                choices = self._root(board, depth, deadline, 1)
-                best_move, best_score = choices[0]
-                completed_depth = depth
+                choices = self._root(board, depth, deadline, stop)
+                best, score = choices[0]
+                completed = depth
             except SearchStopped:
                 break
-        return best_move, best_score, completed_depth
+        return best, score, completed
 
-    def analyze(self, board: chess.Board, max_lines: int) -> tuple[list[tuple[chess.Move, int, list[chess.Move]]], int]:
-        deadline = time.perf_counter() + 2.0
-        try:
-            choices = self._root(board, 3, deadline, max(1, max_lines))
-            lines: list[tuple[chess.Move, int, list[chess.Move]]] = []
-            for move, score in choices:
-                board.push(move)
-                replies = self._root(board, 2, deadline, 1)
-                board.pop()
-                pv = [move] + ([replies[0][0]] if replies else [])
-                lines.append((move, score, pv))
-            return lines, 3
-        except SearchStopped:
+    def analyze(self, board: chess.Board, max_lines: int,
+                stop: Event | None = None) -> tuple[list, int]:
+        if max_lines <= 0:
             return [], 0
+        choices, completed = [], 0
+        deadline = time.perf_counter() + 2
+        for depth in range(1, 4):
+            try:
+                choices = self._root(board, depth, deadline, stop)
+                completed = depth
+            except SearchStopped:
+                break
+        return [(move, score, [move]) for move, score in choices[:max_lines]], completed
 
-    def _root(self, board: chess.Board, depth: int, deadline: float, wanted: int) -> list[tuple[chess.Move, int]]:
-        choices: list[tuple[chess.Move, int]] = []
+    def _root(self, board, depth, deadline, stop):
+        choices = []
         for move in self._ordered_moves(board):
-            self._check_deadline(deadline)
+            self._check_deadline(deadline, stop)
             board.push(move)
-            score = -self._negamax(board, depth - 1, -MATE_SCORE, MATE_SCORE, deadline, 1)
-            board.pop()
+            try:
+                score = -self._negamax(board, depth - 1, -MATE_SCORE, MATE_SCORE, deadline, 1, stop)
+            finally:
+                board.pop()
             choices.append((move, score))
-        choices.sort(key=lambda item: (-item[1], item[0].uci()))
-        return choices[:wanted]
+        return sorted(choices, key=lambda item: (-item[1], item[0].uci()))
 
-    def _negamax(self, board: chess.Board, depth: int, alpha: int, beta: int, deadline: float, ply: int) -> int:
-        self._check_deadline(deadline)
+    def _negamax(self, board, depth, alpha, beta, deadline, ply, stop):
+        self._check_deadline(deadline, stop)
         if board.is_checkmate():
             return -MATE_SCORE + ply
-        if board.is_game_over(claim_draw=False):
+        if board.is_game_over(claim_draw=True):
             return 0
         if depth == 0:
-            return self._evaluate(board)
+            value = float(self.network.predict(encode(board)))
+            return int(np.arctanh(np.clip(value, -0.999, 0.999)) * 600) * (1 if board.turn else -1)
         best = -MATE_SCORE
         for move in self._ordered_moves(board):
             board.push(move)
-            score = -self._negamax(board, depth - 1, -beta, -alpha, deadline, ply + 1)
-            board.pop()
-            best = max(best, score)
-            alpha = max(alpha, score)
+            try:
+                score = -self._negamax(board, depth - 1, -beta, -alpha, deadline, ply + 1, stop)
+            finally:
+                board.pop()
+            best, alpha = max(best, score), max(alpha, score)
             if alpha >= beta:
                 break
         return best
 
-    def _evaluate(self, board: chess.Board) -> int:
-        white_score = 0
-        for square, piece in board.piece_map().items():
-            score = PIECE_VALUE[piece.piece_type]
-            rank = chess.square_rank(square)
-            file = chess.square_file(square)
-            center_distance = abs(rank - 3.5) + abs(file - 3.5)
-            if piece.piece_type in (chess.KNIGHT, chess.BISHOP, chess.PAWN):
-                score += int(max(0, 4 - center_distance) * self.profile.center_weight)
-            if piece.piece_type == chess.PAWN:
-                advance = rank if piece.color == chess.WHITE else 7 - rank
-                score += advance * self.profile.pawn_advance_weight
-            if piece.piece_type == chess.KING:
-                score += self._king_safety(board, square, piece.color)
-            white_score += score if piece.color == chess.WHITE else -score
-        return white_score if board.turn == chess.WHITE else -white_score
-
-    def _king_safety(self, board: chess.Board, king: chess.Square, color: chess.Color) -> int:
-        rank, file = chess.square_rank(king), chess.square_file(king)
-        home_rank = 0 if color == chess.WHITE else 7
-        castled = rank == home_rank and file in (2, 6)
-        score = self.profile.king_safety_weight if castled else 0
-        pawn_rank = rank + (1 if color == chess.WHITE else -1)
-        if 0 <= pawn_rank < 8:
-            for file_offset in (-1, 0, 1):
-                pawn_file = file + file_offset
-                if 0 <= pawn_file < 8 and board.piece_at(chess.square(pawn_file, pawn_rank)) == chess.Piece(chess.PAWN, color):
-                    score += self.profile.king_safety_weight // 3
-        return score
-
-    def _ordered_moves(self, board: chess.Board) -> Iterable[chess.Move]:
-        def order(move: chess.Move) -> tuple[int, str]:
-            moving = board.piece_at(move.from_square)
-            captured = board.piece_at(move.to_square)
-            score = 0
-            if captured:
-                score += PIECE_VALUE[captured.piece_type] * 20 - PIECE_VALUE[moving.piece_type]
-            if move.promotion:
-                score += PIECE_VALUE[move.promotion]
-            board.push(move)
-            if board.is_check():
-                score += self.profile.check_bonus
-            board.pop()
-            return -score, move.uci()
-
-        return sorted(board.legal_moves, key=order)
+    @staticmethod
+    def _ordered_moves(board):
+        return sorted(board.legal_moves, key=lambda m: (-int(board.is_capture(m)), -int(m.promotion or 0), m.uci()))
 
     @staticmethod
-    def _depth_for(skill: int) -> int:
-        if skill <= 2:
-            return 1
-        if skill <= 5:
-            return 2
-        if skill <= 8:
-            return 3
-        return 4
-
-    @staticmethod
-    def _check_deadline(deadline: float) -> None:
-        if time.perf_counter() >= deadline:
+    def _check_deadline(deadline, stop):
+        if (stop is not None and stop.is_set()) or time.perf_counter() >= deadline:
             raise SearchStopped

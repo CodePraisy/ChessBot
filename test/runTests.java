@@ -10,6 +10,8 @@ import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 
 import ai.Suggestion;
+import ai.engineBootstrap;
+import ai.engineRegistry;
 import ai.devRandomEngine;
 import ai.externalProcessProvider;
 import ai.searchLimits;
@@ -171,14 +173,36 @@ public class runTests {
         List<Suggestion> s = dev.analyze(p, 3).get(5, TimeUnit.SECONDS);
         check("dev engine returns 3 fake suggestions", s.size() == 3 && s.stream().allMatch(x -> p.isLegal(x.move())));
 
-        String python = Files.isRegularFile(Path.of("engine/venv/Scripts/python.exe")) ? "engine/venv/Scripts/python.exe" : "python";
-        externalProcessProvider py = new externalProcessProvider("Atlas — Balanced", python, "engine/bridge.py", "--model", "atlas");
+        String python = engineBootstrap.pythonExecutable();
+        Path gymFixture = tempDir("gym");
+        Path checkpoint = gymFixture.resolve("fixture.npz");
+        // Save untrained random weights only; this integration fixture performs no training.
+        Process createCheckpoint = new ProcessBuilder(python, "-c",
+                "import sys; sys.path.insert(0, 'engine'); import numpy as np; from pathlib import Path; "
+                + "from neural_model import ValueNetwork; ValueNetwork(np.random.default_rng(0)).save(Path(sys.argv[1]), "
+                + "{'id':'model-fixture','trained_positions':0})", checkpoint.toString()).inheritIO().start();
+        check("checkpoint fixture created without training", createCheckpoint.waitFor(10, TimeUnit.SECONDS) && createCheckpoint.exitValue() == 0);
+        externalProcessProvider py = new externalProcessProvider("Saved test model", python, "engine/bridge.py", "--checkpoint", checkpoint.toString());
         check("Python model becomes available", waitFor(py::isAvailable, 20_000));
         Move pm = py.chooseMove(p, List.of(), searchLimits.forSkill(1)).get(10, TimeUnit.SECONDS);
         check("Python model returns a legal move", p.isLegal(pm));
         List<Suggestion> pythonAnalysis = py.analyze(p, 2).get(10, TimeUnit.SECONDS);
         check("Python model provides legal analysis", !pythonAnalysis.isEmpty() && pythonAnalysis.stream().allMatch(x -> p.isLegal(x.move())));
         py.shutdown();
+
+        List<Object> manifestModels = new ArrayList<>();
+        for (int i = 0; i < 10; i++) manifestModels.add(Json.map("id", "model-test-" + i, "checkpoint", "fixture.npz"));
+        Files.writeString(gymFixture.resolve("champions.json"), Json.write(Json.map("models", manifestModels)));
+        engineRegistry.clear();
+        engineBootstrap.installFrom(gymFixture);
+        try {
+            check("Java discovers ten saved gym models", engineRegistry.providers().size() == 10
+                    && engineRegistry.providers().stream().allMatch(x -> x.name().startsWith("model-test-")));
+            check("saved gym models load in Python processes", waitFor(() -> engineRegistry.providers().stream().allMatch(x -> x.isAvailable()), 20_000));
+        } finally {
+            engineRegistry.providers().forEach(x -> ((externalProcessProvider) x).shutdown());
+            engineRegistry.clear();
+        }
 
         // externalProcessProvider against a tiny fake engine process speaking the JSON-lines contract
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();

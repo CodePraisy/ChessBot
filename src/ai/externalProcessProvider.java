@@ -38,6 +38,7 @@ public class externalProcessProvider implements moveProvider, analysisProvider {
     private Process process;
     private BufferedWriter toEngine;
     private volatile boolean ready;
+    private volatile boolean closed;
     private final AtomicLong ids = new AtomicLong();
     private final Map<Long, CompletableFuture<Map<String, Object>>> waiting = new ConcurrentHashMap<>();
     private volatile long currentMoveId = -1;
@@ -46,6 +47,7 @@ public class externalProcessProvider implements moveProvider, analysisProvider {
     public externalProcessProvider(String displayName, String... command) {
         this.displayName = displayName;
         this.command = command;
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown, "engine-shutdown"));
         Thread t = new Thread(this::start, "engine-start");
         t.setDaemon(true);
         t.start(); // slow model loads happen in the background
@@ -54,6 +56,7 @@ public class externalProcessProvider implements moveProvider, analysisProvider {
     private void start() {
         try {
             process = new ProcessBuilder(command).start();
+            if (closed) { process.destroy(); return; }
             toEngine = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
             daemon("engine-stdout", () -> readLoop(new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))));
             daemon("engine-stderr", () -> {
@@ -141,6 +144,7 @@ public class externalProcessProvider implements moveProvider, analysisProvider {
 
     /** Asks the engine to exit (call on shutdown if you keep a reference). */
     public void shutdown() {
+        closed = true;
         try { send(Json.map("type", "quit")); } catch (IOException ignored) { }
         if (process != null) process.destroy();
     }

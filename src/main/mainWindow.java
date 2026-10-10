@@ -262,8 +262,9 @@ public class mainWindow extends JFrame {
     }
 
     public static void showNoEngineDialog(Component parent) {
-        style.info(parent, "No engine connected",
-                "<html><div style='width:420px'><b>No chess engine is connected yet.</b><br><br>"
-                + "The Python models are registered in <i>src/ai/engineBootstrap.java</i>. Check that the Python environment has the packages in <i>engine/reqiurements.txt</i>.</div></html>");
+        style.info(parent, "Train your first models",
+                "<html><div style='width:420px'><b>No saved training models are available yet.</b><br><br>"
+                + "Run <i>engine/train_gym.py</i> in a Python terminal. The gym saves its best 10 models after each generation. "
+                + "Restart this game after a generation finishes to select those models.</div></html>");
     }
 }

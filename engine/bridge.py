@@ -1,85 +1,113 @@
-"""JSON-lines adapter between Java's externalProcessProvider and the Python AI models."""
-
+"""Java JSON-lines inference adapter for a saved gym checkpoint. Never trains."""
 from __future__ import annotations
 
+import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
+from pathlib import Path
 import sys
-from typing import Any
+from threading import Event, Lock
 
 import chess
+import numpy as np
 
-from ai_models import ChessModel, MODELS
+from ai_models import ChessModel, MATE_SCORE
+from neural_model import ValueNetwork
+
+OUTPUT_LOCK = Lock()
 
 
-def emit(message: dict[str, Any]) -> None:
-    print(json.dumps(message, separators=(",", ":")), flush=True)
+def emit(message):
+    with OUTPUT_LOCK:
+        print(json.dumps(message, separators=(",", ":")), flush=True)
 
 
-def move_form(move: chess.Move) -> list[Any]:
-    result: list[Any] = [
-        [7 - chess.square_rank(move.from_square), chess.square_file(move.from_square)],
-        [7 - chess.square_rank(move.to_square), chess.square_file(move.to_square)],
-    ]
+def move_form(move):
+    result = [[7 - chess.square_rank(move.from_square), chess.square_file(move.from_square)],
+              [7 - chess.square_rank(move.to_square), chess.square_file(move.to_square)]]
     if move.promotion:
         result.append(move.promotion)
     return result
 
 
-def handle(model: ChessModel, message: dict[str, Any]) -> dict[str, Any] | None:
-    kind = message.get("type")
-    if kind in ("hello", "cancel"):
-        return None
-    if kind == "quit":
-        raise EOFError
+def handle(model, message, stop=None):
     request_id = message.get("id")
     try:
-        position = message["position"]
-        board = chess.Board(position["fen"])
+        kind = message.get("type")
+        if kind in ("hello", "cancel", "quit"):
+            return None
+        board = chess.Board(message["position"]["fen"])
+        if not board.is_valid():
+            raise ValueError("Invalid chess position")
         if kind == "move":
             limits = message.get("limits", {})
-            move, _, _ = model.choose(board, int(limits.get("skillLevel", 5)), int(limits.get("maxTimeMs", 5000)))
+            move, _, _ = model.choose(board, int(limits.get("skillLevel", 5)),
+                                      int(limits.get("maxTimeMs", 5000)), stop)
             if move is None:
-                return {"type": "error", "id": request_id, "message": "game is over"}
+                raise ValueError("Game is over")
             return {"type": "move", "id": request_id, "move": move_form(move)}
         if kind == "analyze":
-            lines, depth = model.analyze(board, int(message.get("maxLines", 3)))
-            return {
-                "type": "analysis",
-                "id": request_id,
-                "lines": [
-                    {
-                        "move": move_form(move),
-                        "centipawns": score,
-                        "mateIn": None,
-                        "depth": depth,
-                        "line": [move_form(item) for item in line],
-                        "comment": model.profile.description + " Python model",
-                    }
-                    for move, score, line in lines
-                ],
-            }
-        return {"type": "error", "id": request_id, "message": "unknown message type"}
-    except (KeyError, TypeError, ValueError, chess.InvalidMoveError) as error:
+            lines, depth = model.analyze(board, min(10, max(0, int(message.get("maxLines", 3)))), stop)
+            suggestions = []
+            for move, score, line in lines:
+                mate = None
+                if abs(score) > MATE_SCORE - 1000:
+                    plies = MATE_SCORE - abs(score)
+                    mate = max(1, (plies + 1) // 2) * (1 if score > 0 else -1)
+                suggestions.append({"move": move_form(move), "centipawns": score if mate is None else None,
+                    "mateIn": mate, "depth": depth, "line": [move_form(m) for m in line],
+                    "comment": model.name + " neural evaluation"})
+            return {"type": "analysis", "id": request_id, "lines": suggestions}
+        raise ValueError("Unknown message type")
+    except Exception as error:
         return {"type": "error", "id": request_id, "message": str(error)}
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", choices=MODELS, default="atlas")
+def main():
+    parser = argparse.ArgumentParser(description="Run inference for one gym checkpoint.")
+    parser.add_argument("--checkpoint", type=Path)
     args = parser.parse_args()
-    model = ChessModel(MODELS[args.model])
-    emit({"type": "ready", "name": model.profile.name})
-    for line in sys.stdin:
-        try:
-            message = json.loads(line)
-            response = handle(model, message)
-            if response is not None:
+    if args.checkpoint:
+        network, metadata = ValueNetwork.load(args.checkpoint)
+        model = ChessModel(network, metadata["id"])
+    else:
+        # Used only for diagnostics before checkpoints exist; Java loads saved survivors.
+        model = ChessModel(ValueNetwork(np.random.default_rng(0)))
+    events = {}
+    emit({"type": "ready", "name": model.name})
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        def work(message, stop):
+            response = handle(model, message, stop)
+            if response is not None and not stop.is_set():
                 emit(response)
-        except EOFError:
-            return
-        except Exception as error:  # Never let a malformed request kill the engine process.
-            emit({"type": "error", "id": None, "message": str(error)})
+            events.pop(message.get("id"), None)
+
+        try:
+            for line in sys.stdin:
+                try:
+                    message = json.loads(line)
+                    if not isinstance(message, dict):
+                        raise ValueError("Request must be an object")
+                    kind, request_id = message.get("type"), message.get("id")
+                    if kind == "quit":
+                        break
+                    if kind == "cancel":
+                        active = events.get(request_id)
+                        if active is not None:
+                            active.set()
+                    elif kind != "hello":
+                        stop = Event()
+                        events[request_id] = stop
+                        executor.submit(work, message, stop)
+                except (ValueError, TypeError) as error:
+                    emit({"type": "error", "id": None, "message": str(error)})
+        finally:
+            for stop in list(events.values()):
+                stop.set()
 
 
 if __name__ == "__main__":
