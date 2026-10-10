@@ -264,6 +264,6 @@ public class mainWindow extends JFrame {
     public static void showNoEngineDialog(Component parent) {
         style.info(parent, "No engine connected",
                 "<html><div style='width:420px'><b>No chess engine is connected yet.</b><br><br>"
-                + "The built-in models are registered in <i>src/ai/engineBootstrap.java</i>. If this message appears, check that application startup completed normally.</div></html>");
+                + "The Python models are registered in <i>src/ai/engineBootstrap.java</i>. Check that the Python environment has the packages in <i>engine/reqiurements.txt</i>.</div></html>");
     }
 }

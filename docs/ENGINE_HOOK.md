@@ -1,18 +1,18 @@
 # Engine hook
 
-The app includes three playable Java chess models: **Atlas** (balanced), **Blitz** (attacking), and **Bastion** (positional). They can be selected in Player vs AI or paired in AI vs AI. An external engine plugs in through two interfaces in `src/ai/`, and the rules layer (`src/rules/`) checks every move it returns.
+The app includes three playable Python chess models: **Atlas** (balanced), **Blitz** (attacking), and **Bastion** (positional). They can be selected in Player vs AI or paired in AI vs AI. Java starts one Python process for each model and communicates through the JSON-lines bridge in `engine/bridge.py`.
 
 ## Plugging an engine in (one line)
 
-Open `src/ai/engineBootstrap.java` and uncomment the marked line:
+The models are registered in `src/ai/engineBootstrap.java`:
 
 ```java
-engineRegistry.useEngine(new externalProcessProvider("ChessBot TF", "engine/venv/Scripts/python.exe", "engine/bridge.py"));
+engineRegistry.useEngine(new externalProcessProvider("Atlas — Balanced", "engine/venv/Scripts/python.exe", "engine/bridge.py", "--model", "atlas"));
 ```
 
-`useEngine` registers the engine to play both colours. If the engine also implements `analysisProvider`, it is used for hints and review as well (`externalProcessProvider` implements both). The command runs from the project root. `engine/bridge.py` doesn't exist yet: it's the small script you'll write that speaks the contract below.
+`useEngine` registers the engine to play both colours. If the engine also implements `analysisProvider`, it is used for hints and review as well (`externalProcessProvider` implements both). The command runs from the project root. `bridge.py` uses `python-chess` for full legal move generation and `ai_models.py` for the model-specific alpha-beta search and evaluation.
 
-The built-in models need no setup. `devRandomEngine.java` remains a test fixture for simulated engine failures.
+Install the Python requirements once with `engine/venv/Scripts/python.exe -m pip install -r engine/reqiurements.txt` on Windows. `devRandomEngine.java` remains a Java test fixture for simulated engine failures.
 
 ## The Java side
 
@@ -28,7 +28,7 @@ The built-in models need no setup. `devRandomEngine.java` remains a test fixture
 
 ## Wire contract (JSON, one object per line, UTF-8, over the process's stdin/stdout)
 
-**Board form** (matches `engine/chessEngine.py`): an 8×8 array where **row 0 = rank 8** (Black's back rank), row 7 = rank 1, and col 0 = file a. Pieces are coded 1 pawn, 2 knight, 3 bishop, 4 rook, 5 queen, 6 king. White pieces are positive and Black pieces negative, as in `Chess.simple_board()`. Players are coded 1 = White and −1 = Black.
+**Board form** (matches `engine/chessEngine.py`): an 8×8 array where **row 0 = rank 8** (Black's back rank), row 7 = rank 1, and col 0 = file a. Pieces are coded 1 pawn, 2 knight, 3 bishop, 4 rook, 5 queen, 6 king. White pieces are positive and Black pieces negative, as in `Chess.simple_board()`. Players are coded 1 = White and −1 = Black. The bridge uses the supplied FEN, so it also receives castling and en-passant state.
 
 **Move form:** `[[fromRow, fromCol], [toRow, toCol]]`, plus an optional third element for promotion (piece code 2–5). For example, e2e4 is `[[6,4],[4,4]]` and e7e8=Q is `[[1,4],[0,4],5]`. The helpers are `Move.toEngineForm()` / `fromEngineForm()` and `Position.toEngineForm()` / `fromEngineForm()`.
 
@@ -46,6 +46,6 @@ The built-in models need no setup. `devRandomEngine.java` remains a test fixture
 
 Replies are matched to requests by `id`, so the engine can answer them in any order. Lines on stdout that aren't JSON (for example the `print("Execution time…")` debug output) are ignored, and stderr is echoed to the console. `test/fixtures/fakeEngine.java` is a short working example of the engine side.
 
-## Known gap in the current Python engine
+## Legacy Python prototype
 
-`engine/chessEngine.py` only reports success or failure for each move. It has no castling, en-passant or stalemate state, and its check test only looks at the piece that just moved, so it misses discovered checks. For now the **Java rules layer is the authority**: the app validates every engine move against `Position.isLegal` and sends the full position, including castling rights, the en-passant square and the FEN, so the Python side doesn't need to track game state itself.
+`engine/chessEngine.py` remains as the original prototype. The playable models use `python-chess` in `bridge.py`, which reads the full FEN and therefore handles castling, en passant, checks, stalemate and promotions. The Java rules layer still validates every returned move.

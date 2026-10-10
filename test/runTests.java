@@ -10,7 +10,6 @@ import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 
 import ai.Suggestion;
-import ai.builtInEngine;
 import ai.devRandomEngine;
 import ai.externalProcessProvider;
 import ai.searchLimits;
@@ -172,16 +171,14 @@ public class runTests {
         List<Suggestion> s = dev.analyze(p, 3).get(5, TimeUnit.SECONDS);
         check("dev engine returns 3 fake suggestions", s.size() == 3 && s.stream().allMatch(x -> p.isLegal(x.move())));
 
-        List<builtInEngine> models = List.of(
-                new builtInEngine(builtInEngine.style.BALANCED),
-                new builtInEngine(builtInEngine.style.ATTACKING),
-                new builtInEngine(builtInEngine.style.POSITIONAL));
-        List<Move> modelMoves = new ArrayList<>();
-        for (builtInEngine model : models) modelMoves.add(model.chooseMove(p, List.of(), searchLimits.forSkill(1)).get(5, TimeUnit.SECONDS));
-        check("built-in models are distinct and return legal moves", models.stream().map(builtInEngine::name).distinct().count() == 3
-                && modelMoves.stream().allMatch(p::isLegal));
-        List<Suggestion> builtInAnalysis = models.get(0).analyze(p, 2).get(5, TimeUnit.SECONDS);
-        check("built-in model provides legal analysis", !builtInAnalysis.isEmpty() && builtInAnalysis.stream().allMatch(x -> p.isLegal(x.move())));
+        String python = Files.isRegularFile(Path.of("engine/venv/Scripts/python.exe")) ? "engine/venv/Scripts/python.exe" : "python";
+        externalProcessProvider py = new externalProcessProvider("Atlas — Balanced", python, "engine/bridge.py", "--model", "atlas");
+        check("Python model becomes available", waitFor(py::isAvailable, 20_000));
+        Move pm = py.chooseMove(p, List.of(), searchLimits.forSkill(1)).get(10, TimeUnit.SECONDS);
+        check("Python model returns a legal move", p.isLegal(pm));
+        List<Suggestion> pythonAnalysis = py.analyze(p, 2).get(10, TimeUnit.SECONDS);
+        check("Python model provides legal analysis", !pythonAnalysis.isEmpty() && pythonAnalysis.stream().allMatch(x -> p.isLegal(x.move())));
+        py.shutdown();
 
         // externalProcessProvider against a tiny fake engine process speaking the JSON-lines contract
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
