@@ -1,298 +1,150 @@
 package main;
-import handlers.audioHandler;
-import handlers.configHandler;
-import java.awt.*;
 import javax.swing.*;
+import java.awt.*;
 
+import ai.engineRegistry;
+import ai.moveProvider;
+import components.roundedPanel;
+import components.style;
+import rules.Position;
+import saves.savedGame;
+
+import java.util.List;
+import java.util.Set;
+
+/** The two mode cards behind "Start Game" (Pass & Play / Multiplayer) and "AI Mode" (Player vs AI / AI vs AI). */
 public class gameMenu extends JPanel {
-    public gameMenu(CardLayout cardLayout, JPanel cardPanel, boolean aiMode) {
-        this.setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+    private final mainWindow window;
 
-        JPanel centerPanel = new JPanel();
-        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
-        centerPanel.setBorder(BorderFactory.createEmptyBorder(0, 100, 0, 100));
-        centerPanel.setOpaque(false);
+    public gameMenu(mainWindow window, CardLayout cardLayout, JPanel cardPanel, boolean aiMode) {
+        this.window = window;
+        setLayout(new BorderLayout());
 
-        JButton backButton = new JButton("Back to Main Menu");
-        backButton.setMaximumSize(new Dimension(200, 40)); // Enforce size in BoxLayout
-        backButton.setBackground(new Color(122, 64, 64));
-        backButton.setBorder(BorderFactory.createLineBorder(new Color(64, 64, 64), 3));
-        backButton.setFont(new Font("Comic Sans MS", Font.ITALIC, 20));
-        backButton.setFocusPainted(false);
-        backButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        backButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        backButton.addActionListener(e -> {
-            if (configHandler.getConfigBoolean("soundEffects")) {
-                audioHandler.playClickSound();
-            }
-            
-            cardLayout.show(cardPanel, "mainMenu");
-        });
-        
-        centerPanel.add(Box.createVerticalStrut(15)); // Top padding
-        centerPanel.add(backButton);        
-        
-        JPanel optionsPanel = new JPanel();
-        optionsPanel.setOpaque(false);
-        optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.X_AXIS));
+        JButton back = style.button("‹  Back", style.GRAY, 17, () -> cardLayout.show(cardPanel, "mainMenu"));
+        back.setPreferredSize(new Dimension(130, 42));
+        JLabel heading = new JLabel(aiMode ? "AI Mode" : "Start a Game", SwingConstants.CENTER);
+        heading.setFont(style.titleFont(48));
+        heading.setForeground(style.TEXT);
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
+        top.setBorder(BorderFactory.createEmptyBorder(24, 28, 0, 28));
+        top.add(back, BorderLayout.WEST);
+        top.add(heading, BorderLayout.CENTER);
+        JPanel spacer = new JPanel();
+        spacer.setOpaque(false);
+        spacer.setPreferredSize(new Dimension(130, 42));
+        top.add(spacer, BorderLayout.EAST);
+        add(top, BorderLayout.NORTH);
 
+        JPanel options = new JPanel(new GridBagLayout());
+        options.setOpaque(false);
+        GridBagConstraints c = new GridBagConstraints();
+        c.insets = new Insets(0, 40, 40, 40);
         if (aiMode) {
-            this.setBackground(new Color(64, 88, 115));
-
-            JPanel playerVsAIPanel = new JPanel();
-            playerVsAIPanel.setLayout(new BoxLayout(playerVsAIPanel, BoxLayout.Y_AXIS));
-            playerVsAIPanel.setBackground(new Color(180, 180, 180));
-            playerVsAIPanel.setOpaque(true);                // This makes the background paint
-            playerVsAIPanel.setPreferredSize(new Dimension(400, 800));
-            playerVsAIPanel.setMaximumSize(new Dimension(400, 800));
-            playerVsAIPanel.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 4));
-
-            JLabel playerVsAILabel = new JLabel("Player vs AI", SwingConstants.CENTER);
-            playerVsAILabel.setFont(new Font("Comic Sans MS", Font.BOLD, 50));
-            playerVsAILabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-            playerVsAILabel.setIcon(new ImageIcon("src/assets/desktop_logo2.png"));
-            playerVsAILabel.setVerticalTextPosition(JLabel.BOTTOM);
-            playerVsAILabel.setHorizontalTextPosition(JLabel.CENTER);
-            playerVsAILabel.setMaximumSize(new Dimension(400, 100)); // Limit label height
-
-            JTextPane playerVsAIDesc = new JTextPane();
-            playerVsAIDesc.setContentType("text/html");
-            playerVsAIDesc.setText(
-                "<html><div style='text-align: center; font-family: Comic Sans MS; color: rgb(56, 53, 44);'>"
-                + "<div style='font-size: 18px; font-weight: bold;'>Challenge the Computer</div>"
-                + "<div style='font-size: 14px; margin-top: 4px;'>"
-                + "Play against an AI opponent.<br>"
-                + "Great for practice, learning new strategies, or testing your skills against different difficulty levels."
-                + "</div>"
-                + "</div></html>"
-            );
-            playerVsAIDesc.setEditable(false);
-            playerVsAIDesc.setOpaque(false);
-            playerVsAIDesc.setFocusable(false);
-            playerVsAIDesc.setAlignmentX(Component.CENTER_ALIGNMENT);
-            playerVsAIDesc.setMaximumSize(new Dimension(300, 150)); // Limit vertical growth
-
-            JButton playerVsAIButton = new JButton("Start");
-            playerVsAIButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            playerVsAIButton.setPreferredSize(new Dimension(50, 50));
-            playerVsAIButton.setMaximumSize(new Dimension(50, 50)); // Enforce size in BoxLayout
-            playerVsAIButton.setBackground(new Color(140, 140, 140));
-            playerVsAIButton.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 3));
-            playerVsAIButton.setFont(new Font("Comic Sans MS", Font.ITALIC, 30));
-            playerVsAIButton.setFocusPainted(false);
-            playerVsAIButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            playerVsAIButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            playerVsAIButton.setMaximumSize(new Dimension(250, 50)); // Make button wider and height fixed
-
-            playerVsAIButton.addActionListener(e -> {
-                if (configHandler.getConfigBoolean("soundEffects")) {
-                    audioHandler.playClickSound();
-                }
-            });            
-
-            playerVsAIPanel.add(Box.createVerticalStrut(80)); // spacing
-            playerVsAIPanel.add(playerVsAILabel);
-            playerVsAIPanel.add(Box.createVerticalStrut(30)); // spacing
-            playerVsAIPanel.add(playerVsAIDesc);
-            playerVsAIPanel.add(Box.createVerticalStrut(50)); // spacing
-            playerVsAIPanel.add(playerVsAIButton);
-            playerVsAIPanel.add(Box.createVerticalGlue()); // Push content upwards
-
-            JPanel AIvsAIPanel = new JPanel();
-            AIvsAIPanel.setLayout(new BoxLayout(AIvsAIPanel, BoxLayout.Y_AXIS));
-            AIvsAIPanel.setBackground(new Color(182, 223, 240));
-            AIvsAIPanel.setOpaque(true);
-            AIvsAIPanel.setPreferredSize(new Dimension(400, 800));
-            AIvsAIPanel.setMaximumSize(new Dimension(400, 800));
-            AIvsAIPanel.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 4));
-
-            JLabel AIvsAILabel = new JLabel("AI vs AI", SwingConstants.CENTER);
-            AIvsAILabel.setFont(new Font("Comic Sans MS", Font.BOLD, 50));
-            AIvsAILabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-            AIvsAILabel.setIcon(new ImageIcon("src/assets/sever_logo.png"));
-            AIvsAILabel.setVerticalTextPosition(JLabel.BOTTOM);
-            AIvsAILabel.setHorizontalTextPosition(JLabel.CENTER);
-            AIvsAILabel.setMaximumSize(new Dimension(400, 100)); // Limit label height
-
-            JTextPane AIvsAIDesc = new JTextPane();
-            AIvsAIDesc.setContentType("text/html");
-            AIvsAIDesc.setText(
-                "<html><div style='text-align: center; font-family: Comic Sans MS; color: rgb(56, 53, 44);'>"
-                + "<div style='font-size: 18px; font-weight: bold;'>Watch the Bots Battle</div>"
-                + "<div style='font-size: 14px; margin-top: 4px;'>"
-                + "Let two AIs face off and observe their strategies in action.<br>"
-                + "Great for learning, testing engine strength, or just enjoying an automated match."
-                + "</div>"
-                + "</div></html>"
-            );
-            AIvsAIDesc.setEditable(false);
-            AIvsAIDesc.setOpaque(false);
-            AIvsAIDesc.setFocusable(false);
-            AIvsAIDesc.setAlignmentX(Component.CENTER_ALIGNMENT);
-            AIvsAIDesc.setMaximumSize(new Dimension(300, 200)); // Limit vertical growth
-
-            JButton AIvsAIButton = new JButton("Start");
-            AIvsAIButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            AIvsAIButton.setPreferredSize(new Dimension(50, 50));
-            AIvsAIButton.setMaximumSize(new Dimension(50, 50)); // Enforce size in BoxLayout
-            AIvsAIButton.setBackground(new Color(125, 209, 245));
-            AIvsAIButton.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 3));
-            AIvsAIButton.setFont(new Font("Comic Sans MS", Font.ITALIC, 30));
-            AIvsAIButton.setFocusPainted(false);
-            AIvsAIButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            AIvsAIButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            AIvsAIButton.setMaximumSize(new Dimension(250, 50)); // Make button wider and height fixed
-
-            AIvsAIButton.addActionListener(e -> {
-                if (configHandler.getConfigBoolean("soundEffects")) {
-                    audioHandler.playClickSound();
-                }
-
-            });            
-
-            AIvsAIPanel.add(Box.createVerticalStrut(80)); // spacing
-            AIvsAIPanel.add(AIvsAILabel);
-            AIvsAIPanel.add(Box.createVerticalStrut(30)); // spacing
-            AIvsAIPanel.add(AIvsAIDesc);
-            AIvsAIPanel.add(Box.createVerticalStrut(28)); // spacing
-            AIvsAIPanel.add(AIvsAIButton);
-            AIvsAIPanel.add(Box.createVerticalGlue()); // Push content upwards
-
-            optionsPanel.add(playerVsAIPanel);
-            optionsPanel.add(Box.createHorizontalStrut(120)); // Space between buttons
-            optionsPanel.add(AIvsAIPanel);
+            options.add(modeCard("src/assets/desktop_logo2.png", "Player vs AI", "Challenge the Computer",
+                    "Play against an AI opponent. Great for practice, learning new strategies, or testing your skills against different difficulty levels.",
+                    style.BLUE, this::startPlayerVsAI), c);
+            options.add(modeCard("src/assets/sever_logo.png", "AI vs AI", "Watch the Bots Battle",
+                    "Let two AIs face off and observe their strategies in action. Great for learning, testing engine strength, or just enjoying an automated match.",
+                    style.PURPLE, this::startAIvsAI), c);
         } else {
-            this.setBackground(new Color(88, 102, 91));
-
-            JPanel standardGameButtonPanel = new JPanel();
-            standardGameButtonPanel.setLayout(new BoxLayout(standardGameButtonPanel, BoxLayout.Y_AXIS));
-            standardGameButtonPanel.setBackground(new Color(176, 209, 183));
-            standardGameButtonPanel.setOpaque(true);                // This makes the background paint
-            standardGameButtonPanel.setPreferredSize(new Dimension(400, 800));
-            standardGameButtonPanel.setMaximumSize(new Dimension(400, 800));
-            standardGameButtonPanel.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 4));
-
-            JLabel standardGameLabel = new JLabel("On-Device", SwingConstants.CENTER);
-            standardGameLabel.setFont(new Font("Comic Sans MS", Font.BOLD, 50));
-            standardGameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-            standardGameLabel.setIcon(new ImageIcon("src/assets/desktop_logo.png"));
-            standardGameLabel.setVerticalTextPosition(JLabel.BOTTOM);
-            standardGameLabel.setHorizontalTextPosition(JLabel.CENTER);
-            standardGameLabel.setMaximumSize(new Dimension(400, 100)); // Limit label height
-
-            JTextPane standardGameDesc = new JTextPane();
-            standardGameDesc.setContentType("text/html");
-            standardGameDesc.setText(
-                "<html><div style='text-align: center; font-family: Comic Sans MS; color: rgb(56, 53, 44)'>"
-                + "<div style='font-size: 18px; font-weight: bold;'>Pass & Play</div>"
-                + "<div style='font-size: 14px; margin-top: 4px;'>"
-                + "Play chess locally with a friend using the same device. "
-                + "The board automatically rotates after each move, giving each player "
-                + "their own perspective during their turn."
-                + "</div>"
-                + "</div></html>"
-            );
-            standardGameDesc.setEditable(false);
-            standardGameDesc.setOpaque(false);
-            standardGameDesc.setFocusable(false);
-            standardGameDesc.setAlignmentX(Component.CENTER_ALIGNMENT);
-            standardGameDesc.setMaximumSize(new Dimension(300, 150)); // Limit vertical growth
-          
-            JButton standardGameButton = new JButton("Start");
-            standardGameButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            standardGameButton.setPreferredSize(new Dimension(50, 50));
-            standardGameButton.setMaximumSize(new Dimension(50, 50)); // Enforce size in BoxLayout
-            standardGameButton.setBackground(new Color(151, 209, 163));
-            standardGameButton.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 3));
-            standardGameButton.setFont(new Font("Comic Sans MS", Font.ITALIC, 30));
-            standardGameButton.setFocusPainted(false);
-            standardGameButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            standardGameButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            standardGameButton.setMaximumSize(new Dimension(250, 50)); // Make button wider and height fixed
-
-            standardGameButton.addActionListener(e -> {
-                if (configHandler.getConfigBoolean("soundEffects")) {
-                    audioHandler.playClickSound();
-                }
-                
-                cardLayout.show(cardPanel, "standardGame");
-            });            
-
-            standardGameButtonPanel.add(Box.createVerticalStrut(80)); // spacing
-            standardGameButtonPanel.add(standardGameLabel);
-            standardGameButtonPanel.add(Box.createVerticalStrut(30)); // spacing
-            standardGameButtonPanel.add(standardGameDesc);
-            standardGameButtonPanel.add(Box.createVerticalStrut(50)); // spacing
-            standardGameButtonPanel.add(standardGameButton);
-            standardGameButtonPanel.add(Box.createVerticalGlue()); // Push content upwards
-
-            JPanel multiplayerGameButtonPanel = new JPanel();
-            multiplayerGameButtonPanel.setLayout(new BoxLayout(multiplayerGameButtonPanel, BoxLayout.Y_AXIS));
-            multiplayerGameButtonPanel.setBackground(new Color(182, 223, 240));
-            multiplayerGameButtonPanel.setOpaque(true);
-            multiplayerGameButtonPanel.setPreferredSize(new Dimension(400, 800));
-            multiplayerGameButtonPanel.setMaximumSize(new Dimension(400, 800));
-            multiplayerGameButtonPanel.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 4));
-
-            JLabel multiplayerGameLabel = new JLabel("Multiplayer", SwingConstants.CENTER);
-            multiplayerGameLabel.setFont(new Font("Comic Sans MS", Font.BOLD, 50));
-            multiplayerGameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-            multiplayerGameLabel.setIcon(new ImageIcon("src/assets/internet_logo.png"));
-            multiplayerGameLabel.setVerticalTextPosition(JLabel.BOTTOM);
-            multiplayerGameLabel.setHorizontalTextPosition(JLabel.CENTER);
-            multiplayerGameLabel.setMaximumSize(new Dimension(400, 100)); // Limit label height
-
-            JTextPane multiplayerGameDesc = new JTextPane();
-            multiplayerGameDesc.setContentType("text/html");
-            multiplayerGameDesc.setText(
-                "<html><div style='text-align: center; font-family: Comic Sans MS; color: rgb(56, 53, 44);'>"
-                + "<div style='font-size: 18px; font-weight: bold;'>Play Across Devices</div>"
-                + "<div style='font-size: 14px; margin-top: 4px;'>"
-                + "Play with friends or opponents over LAN or online.<br>"
-                + "Challenge players nearby or across the world. Easily host or join local games, "
-                + "or connect online for remote matches."
-                + "</div>"
-                + "</div></html>"
-            );
-            multiplayerGameDesc.setEditable(false);
-            multiplayerGameDesc.setOpaque(false);
-            multiplayerGameDesc.setFocusable(false);
-            multiplayerGameDesc.setAlignmentX(Component.CENTER_ALIGNMENT);
-            multiplayerGameDesc.setMaximumSize(new Dimension(300, 200)); // Limit vertical growth
-
-            JButton multiplayerGameButton = new JButton("Start");
-            multiplayerGameButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            multiplayerGameButton.setPreferredSize(new Dimension(50, 50));
-            multiplayerGameButton.setMaximumSize(new Dimension(50, 50)); // Enforce size in BoxLayout
-            multiplayerGameButton.setBackground(new Color(125, 209, 245));
-            multiplayerGameButton.setBorder(BorderFactory.createLineBorder(new Color(89, 83, 67), 3));
-            multiplayerGameButton.setFont(new Font("Comic Sans MS", Font.ITALIC, 30));
-            multiplayerGameButton.setFocusPainted(false);
-            multiplayerGameButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-            multiplayerGameButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            multiplayerGameButton.setMaximumSize(new Dimension(250, 50)); // Make button wider and height fixed
-
-            multiplayerGameButton.addActionListener(e -> {
-                if (configHandler.getConfigBoolean("soundEffects")) {
-                    audioHandler.playClickSound();
-                }
-            });            
-
-            multiplayerGameButtonPanel.add(Box.createVerticalStrut(80)); // spacing
-            multiplayerGameButtonPanel.add(multiplayerGameLabel);
-            multiplayerGameButtonPanel.add(Box.createVerticalStrut(30)); // spacing
-            multiplayerGameButtonPanel.add(multiplayerGameDesc);
-            multiplayerGameButtonPanel.add(Box.createVerticalStrut(28)); // spacing
-            multiplayerGameButtonPanel.add(multiplayerGameButton);
-            multiplayerGameButtonPanel.add(Box.createVerticalGlue()); // Push content upwards
-
-            optionsPanel.add(standardGameButtonPanel);
-            optionsPanel.add(Box.createHorizontalStrut(120)); // Space between buttons
-            optionsPanel.add(multiplayerGameButtonPanel);
+            options.add(modeCard("src/assets/desktop_logo.png", "On-Device", "Pass & Play",
+                    "Play chess locally with a friend using the same device. The board automatically rotates after each move, giving each player their own perspective during their turn.",
+                    style.GREEN, () -> { if (!window.offerResume(Set.of(savedGame.LOCAL))) window.startGame(gameSetup.local()); }), c);
+            options.add(modeCard("src/assets/internet_logo.png", "Multiplayer", "Play Across Devices",
+                    "Play with friends or opponents over LAN or online. Easily host or join games, and pick up unfinished matches from Saved Games.",
+                    style.LIGHT_BLUE, () -> multiplayerDialog.open(window)), c);
         }
+        add(options, BorderLayout.CENTER);
+    }
 
-        centerPanel.add(optionsPanel);
-    
-        this.add(centerPanel);
+    @Override
+    protected void paintComponent(Graphics g) { style.paintBackdrop((Graphics2D) g, getWidth(), getHeight()); }
+
+    /** One big card: icon, title, subtitle, description and a Start button. */
+    private JPanel modeCard(String icon, String title, String subtitle, String desc, Color accent, Runnable start) {
+        JPanel card = new roundedPanel(style.SIDE_PANEL);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(BorderFactory.createEmptyBorder(40, 34, 40, 42));
+        Dimension size = new Dimension(430, 640);
+        card.setPreferredSize(size);
+
+        JLabel iconLabel = new JLabel(new ImageIcon(new ImageIcon(icon).getImage().getScaledInstance(190, 190, Image.SCALE_SMOOTH)));
+        iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JLabel t = new JLabel(title);
+        t.setFont(style.titleFont(42));
+        t.setForeground(style.TEXT);
+        t.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JLabel sub = style.label(subtitle, Font.BOLD, 20);
+        sub.setForeground(style.isDark() ? style.current.buttonText() : style.MUTED);
+        sub.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JLabel d = style.label("<html><div style='text-align:center; width:270px'>" + desc + "</div></html>", Font.PLAIN, 16);
+        d.setForeground(style.MUTED);
+        d.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JButton go = style.button("Start", accent, 24, start);
+        go.setPreferredSize(new Dimension(260, 56));
+        go.setMaximumSize(new Dimension(260, 56));
+
+        card.add(iconLabel);
+        card.add(Box.createVerticalStrut(18));
+        card.add(t);
+        card.add(Box.createVerticalStrut(6));
+        card.add(sub);
+        card.add(Box.createVerticalStrut(14));
+        card.add(d);
+        card.add(Box.createVerticalGlue());
+        card.add(go);
+        return card;
+    }
+
+    // ---------- AI setup dialogs ----------
+
+    private void startPlayerVsAI() {
+        if (!engineRegistry.hasMoveProvider()) { mainWindow.showNoEngineDialog(this); return; }
+        if (window.offerResume(Set.of(savedGame.AI))) return;
+
+        JPanel p = new JPanel(new GridLayout(0, 1, 0, 8));
+        p.add(style.label("Play as:", Font.BOLD, 20));
+        JComboBox<String> colour = new JComboBox<>(new String[]{"White", "Black", "Random"});
+        p.add(colour);
+        p.add(style.label("Difficulty (1-10):", Font.BOLD, 20));
+        JSlider skill = skillSlider();
+        p.add(skill);
+        style.deepFont(colour, style.font(Font.PLAIN, 18));
+        if (style.choose(this, "Player vs AI", p, "Start", "Cancel") != 0) return;
+        int c = colour.getSelectedIndex() == 0 ? Position.WHITE : colour.getSelectedIndex() == 1 ? Position.BLACK
+                : (Math.random() < 0.5 ? Position.WHITE : Position.BLACK);
+        window.startGame(gameSetup.vsAi(c, skill.getValue()));
+    }
+
+    private void startAIvsAI() {
+        List<moveProvider> providers = engineRegistry.providers();
+        if (providers.isEmpty()) { mainWindow.showNoEngineDialog(this); return; }
+        String[] names = providers.stream().map(moveProvider::name).toArray(String[]::new);
+        JPanel p = new JPanel(new GridLayout(0, 1, 0, 8));
+        p.add(style.label("White engine:", Font.BOLD, 20));
+        JComboBox<String> white = new JComboBox<>(names);
+        p.add(white);
+        p.add(style.label("Black engine:", Font.BOLD, 20));
+        JComboBox<String> black = new JComboBox<>(names);
+        p.add(black);
+        p.add(style.label("Strength (1-10):", Font.BOLD, 20));
+        JSlider skill = skillSlider();
+        p.add(skill);
+        style.deepFont(white, style.font(Font.PLAIN, 18));
+        style.deepFont(black, style.font(Font.PLAIN, 18));
+        if (style.choose(this, "AI vs AI", p, "Start", "Cancel") != 0) return;
+        window.startGame(gameSetup.aiVsAi((String) white.getSelectedItem(), (String) black.getSelectedItem(), skill.getValue()));
+    }
+
+    private static JSlider skillSlider() {
+        JSlider s = new JSlider(1, 10, 5);
+        s.setMajorTickSpacing(1);
+        s.setPaintTicks(true);
+        s.setPaintLabels(true);
+        s.setSnapToTicks(true);
+        s.setFont(style.font(Font.PLAIN, 14));
+        s.setPreferredSize(new Dimension(380, 50));
+        return s;
     }
 }

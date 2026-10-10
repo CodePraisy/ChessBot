@@ -1,0 +1,260 @@
+{
+  "formatVersion": 1,
+  "gameId": "00000000-test-fake-analysis",
+  "mode": "LOCAL",
+  "created": "2026-10-10T12:00:00Z",
+  "updated": "2026-10-10T12:05:00Z",
+  "status": "finished",
+  "result": "1-0",
+  "termination": "CHECKMATE",
+  "players": {
+    "white": {
+      "name": "Fixture White",
+      "playerId": ""
+    },
+    "black": {
+      "name": "Fixture Black",
+      "playerId": ""
+    }
+  },
+  "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "moves": [
+    {
+      "ply": 1,
+      "from": "e2",
+      "to": "e4",
+      "promotion": null,
+      "san": "e4"
+    },
+    {
+      "ply": 2,
+      "from": "e7",
+      "to": "e5",
+      "promotion": null,
+      "san": "e5"
+    },
+    {
+      "ply": 3,
+      "from": "f1",
+      "to": "c4",
+      "promotion": null,
+      "san": "Bc4"
+    },
+    {
+      "ply": 4,
+      "from": "b8",
+      "to": "c6",
+      "promotion": null,
+      "san": "Nc6"
+    },
+    {
+      "ply": 5,
+      "from": "d1",
+      "to": "h5",
+      "promotion": null,
+      "san": "Qh5"
+    },
+    {
+      "ply": 6,
+      "from": "g8",
+      "to": "f6",
+      "promotion": null,
+      "san": "Nf6"
+    },
+    {
+      "ply": 7,
+      "from": "h5",
+      "to": "f7",
+      "promotion": null,
+      "san": "Qxf7#"
+    }
+  ],
+  "analysis": {
+    "0": [
+      {
+        "move": "e2e4",
+        "centipawns": 30,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "e2e4",
+          "e7e5",
+          "g1f3"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "d2d4",
+        "centipawns": 25,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "d2d4"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "g1f3",
+        "centipawns": 20,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "g1f3"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ],
+    "1": [
+      {
+        "move": "e7e5",
+        "centipawns": -25,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "e7e5",
+          "g1f3"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "c7c5",
+        "centipawns": -30,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "c7c5"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ],
+    "2": [
+      {
+        "move": "g1f3",
+        "centipawns": 40,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "g1f3",
+          "b8c6",
+          "f1b5"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "f1c4",
+        "centipawns": 35,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "f1c4"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ],
+    "3": [
+      {
+        "move": "g8f6",
+        "centipawns": -20,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "g8f6",
+          "d2d3"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "b8c6",
+        "centipawns": -25,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "b8c6"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ],
+    "4": [
+      {
+        "move": "g1f3",
+        "centipawns": 90,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "g1f3",
+          "g8f6"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "d1h5",
+        "centipawns": -10,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "d1h5"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ],
+    "5": [
+      {
+        "move": "g7g6",
+        "centipawns": 10,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "g7g6",
+          "h5f3"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "d8e7",
+        "centipawns": 0,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "d8e7"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "g8f6",
+        "centipawns": -9000,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "g8f6"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ],
+    "6": [
+      {
+        "move": "h5f7",
+        "centipawns": null,
+        "mateIn": 1,
+        "depth": 12,
+        "line": [
+          "h5f7"
+        ],
+        "comment": "hand-written fake data"
+      },
+      {
+        "move": "c4f7",
+        "centipawns": 120,
+        "mateIn": null,
+        "depth": 12,
+        "line": [
+          "c4f7"
+        ],
+        "comment": "hand-written fake data"
+      }
+    ]
+  },
+  "settings": {},
+  "someFutureField": {
+    "kept": true
+  }
+}

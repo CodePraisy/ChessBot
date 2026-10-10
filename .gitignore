@@ -1,11 +1,28 @@
+# Java build output
+/bin/
+/out/
+/out-test/
+*.class
+
+# Python environments and caches
 venv/
-*/venv/
-venv/
-*/venv/
+.venv/
 __pycache__/
-*.pyc
-*.class
+*.py[cod]
+.pytest_cache/
+
+# Personal game saves and multiplayer identity
+/src/assets/saves/
+
+# Local credentials and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Operating system files
+Thumbs.db
 .DS_Store
-*.pyc
-*.class
-.vscode/
+
+# Local editor settings (also ignored by the existing repository)
+/.vscode/
