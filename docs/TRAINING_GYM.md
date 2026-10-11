@@ -109,6 +109,13 @@ message explaining how to create models. No named personalities are registered.
 
 Java never trains. Each process loads an immutable `.npz` checkpoint once. A running
 game keeps its loaded model even while the gym publishes newer survivors.
+The game's difficulty slider controls search effort, not the model's learned weights:
+levels 1-3 allow one ply, 4-6 two plies, 7-9 three plies, and 10 four plies. The move
+budget is 200 milliseconds per level (1 second at level 5, 2 seconds at level 10).
+The engine returns sooner when it completes its search, or uses its last completed
+depth when time runs out. Deeper search can change its moves but does not retrain it
+or intentionally add random mistakes. Move search uses the gym's incremental draw
+checks. Animation delays, startup and other pending requests can add to wall time.
 If a saved game's model has been eliminated, Player vs AI falls back to the current
 top survivor. AI vs AI requires both saved model IDs to remain available.
 

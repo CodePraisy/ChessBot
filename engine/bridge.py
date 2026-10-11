@@ -46,7 +46,8 @@ def handle(model, message, stop=None):
         if kind == "move":
             limits = message.get("limits", {})
             move, _, _ = model.choose(board, int(limits.get("skillLevel", 5)),
-                                      int(limits.get("maxTimeMs", 5000)), stop)
+                                      int(limits.get("maxTimeMs", 1000)), stop,
+                                      max_depth=limits.get("maxDepth"))
             if move is None:
                 raise ValueError("Game is over")
             return {"type": "move", "id": request_id, "move": move_form(move)}

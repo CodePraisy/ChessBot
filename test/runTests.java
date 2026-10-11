@@ -227,7 +227,11 @@ public class runTests {
         List<Suggestion> lines = ext.analyze(after, 2).get(10, TimeUnit.SECONDS);
         check("external engine: analysis round trip", lines.size() == 2 && after.isLegal(lines.get(0).move()) && lines.get(0).centipawns() != null);
         ext.shutdown();
-        check("searchLimits maps difficulty", searchLimits.forSkill(1).maxDepth() == 2 && searchLimits.forSkill(10).maxTimeMs() == 10000 && searchLimits.forSkill(42).skillLevel() == 10);
+        check("searchLimits maps responsive difficulty", searchLimits.forSkill(1).maxDepth() == 1
+                && searchLimits.forSkill(1).maxTimeMs() == 200
+                && searchLimits.forSkill(5).maxDepth() == 2 && searchLimits.forSkill(5).maxTimeMs() == 1000
+                && searchLimits.forSkill(10).maxDepth() == 4 && searchLimits.forSkill(10).maxTimeMs() == 2000
+                && searchLimits.forSkill(42).skillLevel() == 10);
     }
 
     // ---------------------------------------------------------------- multiplayer

@@ -168,6 +168,44 @@ class GymTests(unittest.TestCase):
         self.assertIn(move, board.legal_moves)
         self.assertEqual(0, depth)
 
+    def test_search_respects_depth_and_small_time_budget(self):
+        model = ChessModel(self.network)
+        board = chess.Board()
+        initial = board.fen()
+        move, _, depth = model.choose(board, 10, 500, max_depth=1)
+        self.assertIn(move, board.legal_moves)
+        self.assertEqual(1, depth)
+        started = time.perf_counter()
+        move, _, depth = model.choose(board, 10, 100)
+        self.assertLess(time.perf_counter() - started, 0.5)
+        self.assertIn(move, board.legal_moves)
+        self.assertEqual(initial, board.fen())
+        self.assertFalse(board.move_stack)
+
+    def test_pruned_move_search_matches_full_root_best_score(self):
+        model = ChessModel(self.network)
+        for fen in (chess.STARTING_FEN, "4k3/8/8/3pP3/8/8/8/4K2R w - d6 0 1",
+                    "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1"):
+            board = chess.Board(fen)
+            full = model._root(board, 2, time.perf_counter() + 5, None)
+            pruned = model._root(board, 2, time.perf_counter() + 5, None,
+                                 prune=True, preferred=full[-1][0])
+            self.assertEqual(full[0][1], pruned[0][1])
+            self.assertEqual(dict(full)[pruned[0][0]], pruned[0][1])
+            self.assertEqual(fen, board.fen())
+
+    def test_search_uses_incremental_draws_and_restores_repetition_history(self):
+        model = ChessModel(self.network)
+        board = chess.Board()
+        for move in (["g1f3", "g8f6", "f3g1", "f6g8"] * 2)[:7]:
+            board.push_uci(move)
+        initial = board.fen(), list(board.move_stack)
+        with patch.object(board, "can_claim_threefold_repetition", side_effect=AssertionError("history replay")):
+            choices = model._root(board, 2, time.perf_counter() + 5, None)
+        scores = dict(choices)
+        self.assertEqual(0, scores[chess.Move.from_uci("f6g8")])
+        self.assertEqual(initial, (board.fen(), list(board.move_stack)))
+
     def test_bridge_keeps_request_id_and_legal_lines(self):
         board = chess.Board()
         model = ChessModel(self.network)
@@ -182,6 +220,14 @@ class GymTests(unittest.TestCase):
         self.assertTrue(all(x["move"] in [move_form(m) for m in board.legal_moves] for x in reply["lines"]))
         request["position"]["fen"] = "bad fen"
         self.assertEqual({"type": "error", "id": 17}, {k: handle(model, request)[k] for k in ("type", "id")})
+
+    def test_bridge_forwards_depth_limit(self):
+        model = ChessModel(self.network)
+        with patch.object(model, "choose", return_value=(chess.Move.from_uci("e2e4"), 0, 1)) as choose:
+            reply = handle(model, {"type": "move", "id": 18, "position": {"fen": chess.STARTING_FEN},
+                                  "limits": {"skillLevel": 10, "maxTimeMs": 2000, "maxDepth": 1}})
+        self.assertEqual(18, reply["id"])
+        self.assertEqual(1, choose.call_args.kwargs["max_depth"])
 
     def test_scores_are_symmetric_and_only_top_ten_survive(self):
         population, _ = populate([], 12, 1, self.rng, 0.01)

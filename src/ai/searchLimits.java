@@ -14,7 +14,7 @@ public record searchLimits(int skillLevel, int maxDepth, long maxTimeMs) {
     /** The Player vs AI difficulty slider maps 1-10 to these limits. */
     public static searchLimits forSkill(int skill) {
         int s = Math.max(1, Math.min(10, skill));
-        return new searchLimits(s, s + 1, 1000L * s);
+        return new searchLimits(s, 1 + (s - 1) / 3, 200L * s);
     }
 
     public Map<String, Object> toJson() { return Json.map("skillLevel", (long) skillLevel, "maxDepth", (long) maxDepth, "maxTimeMs", maxTimeMs); }
