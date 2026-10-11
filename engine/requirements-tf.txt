@@ -1,0 +1,5 @@
+# TensorFlow training on Lichess data (CPU on native Windows; see docs/TRAINING_TF.md for GPU via WSL2).
+chess==1.11.2
+numpy==2.4.4
+tensorflow==2.21.0
+zstandard>=0.23
