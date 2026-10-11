@@ -1,5 +1,6 @@
 package handlers;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,7 +9,7 @@ import java.util.Map;
 /**
  * Tiny JSON parser/writer (standard library only).
  * Objects -> LinkedHashMap<String,Object>, arrays -> ArrayList<Object>,
- * numbers -> Long (integral) or Double, plus String, Boolean and null.
+ * numbers -> Long (integral), BigInteger (larger integers) or Double, plus String, Boolean and null.
  */
 public final class Json {
     private final String s;
@@ -113,7 +114,8 @@ public final class Json {
         if (n.isEmpty()) throw err("unexpected character");
         try {
             if (n.contains(".") || n.contains("e") || n.contains("E")) return Double.parseDouble(n);
-            return Long.parseLong(n);
+            try { return Long.parseLong(n); }
+            catch (NumberFormatException outsideLongRange) { return new BigInteger(n); }
         } catch (NumberFormatException ex) {
             throw err("bad number " + n);
         }
@@ -139,7 +141,8 @@ public final class Json {
     private static void write(StringBuilder b, Object v, int indent, int depth) {
         if (v == null) b.append("null");
         else if (v instanceof String str) quote(b, str);
-        else if (v instanceof Boolean || v instanceof Long || v instanceof Integer || v instanceof Short) b.append(v);
+        else if (v instanceof Boolean || v instanceof Long || v instanceof Integer || v instanceof Short
+                || v instanceof BigInteger) b.append(v);
         else if (v instanceof Number n) {
             double d = n.doubleValue();
             if (d == Math.rint(d) && !Double.isInfinite(d) && Math.abs(d) < 1e15) b.append((long) d); else b.append(d);
@@ -210,6 +213,10 @@ public final class Json {
 
     public static long num(Map<String, Object> m, String k, long def) {
         Object v = m == null ? null : m.get(k);
+        if (v instanceof BigInteger big) {
+            try { return big.longValueExact(); }
+            catch (ArithmeticException outsideLongRange) { return def; }
+        }
         if (v instanceof Number n) return n.longValue();
         if (v instanceof String str) { try { return Long.parseLong(str); } catch (NumberFormatException e) { return def; } }
         return def;

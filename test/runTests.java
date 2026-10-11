@@ -1,4 +1,5 @@
 import java.nio.charset.StandardCharsets;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -78,6 +79,14 @@ public class runTests {
         check("parse numbers/arrays/strings", m.get("a").equals(1L) && ((List<?>) m.get("b")).get(2).equals(2.5)
                 && ((List<?>) m.get("b")).get(3).equals("x\"y\né") && Json.num(Json.obj(m, "c"), "d", 0) == -3);
         check("write/parse round trip", Json.parseObject(Json.write(m)).equals(m) && Json.parseObject(Json.pretty(m)).equals(m));
+        String rngState = "251056902204684444784443135617586541798";
+        Object wide = Json.parse(rngState);
+        check("128-bit Python RNG state parses exactly", wide.equals(new BigInteger(rngState)));
+        check("large integers serialize without precision loss", Json.write(wide).equals(rngState)
+                && Json.write(Json.parse("-" + rngState)).equals("-" + rngState));
+        check("long boundaries remain Long", Json.parse(Long.toString(Long.MAX_VALUE)).equals(Long.MAX_VALUE)
+                && Json.parse(Long.toString(Long.MIN_VALUE)).equals(Long.MIN_VALUE));
+        check("out-of-range long accessor returns default", Json.num(Json.map("state", wide), "state", 7) == 7);
         boolean threw = false;
         try { Json.parse("{\"a\": }"); } catch (IllegalArgumentException e) { threw = true; }
         check("malformed JSON throws", threw);
@@ -192,7 +201,10 @@ public class runTests {
 
         List<Object> manifestModels = new ArrayList<>();
         for (int i = 0; i < 10; i++) manifestModels.add(Json.map("id", "model-test-" + i, "checkpoint", "fixture.npz"));
-        Files.writeString(gymFixture.resolve("champions.json"), Json.write(Json.map("models", manifestModels)));
+        Files.writeString(gymFixture.resolve("champions.json"), Json.write(Json.map("models", manifestModels,
+                "rng", Json.map("bit_generator", "PCG64", "state", Json.map(
+                    "state", new BigInteger("251056902204684444784443135617586541798"),
+                    "inc", new BigInteger("332724090758049132448979897138935081983"))))));
         engineRegistry.clear();
         engineBootstrap.installFrom(gymFixture);
         try {
