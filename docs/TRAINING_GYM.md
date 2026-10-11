@@ -75,6 +75,11 @@ benchmark plays a fixed set of short games and times one disposable synthetic fi
 it never opens or writes your saved gym. Its generation estimate depends on game
 lengths and excludes checkpoint saving. Actual training prints separate self-play,
 learning and tournament timings.
+After the first completed generation, the terminal also shows elapsed time,
+estimated remaining time and estimated total runtime for this launch. The estimate
+updates after every generation using the last five generation durations, including
+learning and checkpoint saving. A resumed launch estimates only the additional
+generations requested. Game lengths and machine load can change the estimate.
 
 The optimized move picker tracks repetition counts instead of replaying the whole
 history for every candidate move. It preserves claimable draws, including claims

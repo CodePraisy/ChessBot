@@ -10,6 +10,7 @@ import argparse
 from dataclasses import dataclass, field
 from concurrent.futures import ProcessPoolExecutor
 import json
+import math
 import signal
 from pathlib import Path
 import tempfile
@@ -25,6 +26,17 @@ from repetition import RepetitionTracker
 
 SURVIVORS = 10
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "models" / "gym"
+
+
+def format_duration(seconds):
+    seconds = max(0, math.ceil(seconds))
+    parts = []
+    for size, suffix in ((86400, "d"), (3600, "h"), (60, "m")):
+        amount, seconds = divmod(seconds, size)
+        if amount:
+            parts.append(f"{amount}{suffix}")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 
 @dataclass
@@ -231,6 +243,7 @@ def generation_step(population, elite_count, args, rng, replay_x, replay_y, log,
 
 
 def train(args):
+    run_started = time.perf_counter()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     lock = output / "training.lock"
@@ -246,7 +259,9 @@ def train(args):
         winners, generation, next_id, rng, x, y = load_state(output, args.seed)
         print(f"Chess training gym | {args.population} candidates | top {SURVIVORS} survive | {args.workers} workers")
         print(f"Output: {output}\nResuming generation {generation}. Ctrl+C stops; restart resumes the last completed generation.")
-        for _ in range(args.generations):
+        print("Runtime estimate: measuring the first generation...", flush=True)
+        durations = []
+        for run_index in range(args.generations):
             generation += 1
             started = time.perf_counter()
             population, next_id = populate(winners, args.population, next_id, rng, args.mutation)
@@ -259,7 +274,15 @@ def train(args):
                     history.flush()
                 winners, x, y = generation_step(population, len(winners), args, rng, x, y, log, executor)
             publish(output, generation, winners, next_id, rng, x, y)
-            print(f"\n  Top 10 saved ({time.perf_counter()-started:.1f}s). Replay: {len(y)} positions")
+            duration = time.perf_counter() - started
+            durations.append(duration)
+            durations = durations[-5:]
+            elapsed = time.perf_counter() - run_started
+            remaining = (sum(durations) / len(durations)) * (args.generations - run_index - 1)
+            print(f"\n  Top 10 saved ({duration:.1f}s). Replay: {len(y)} positions")
+            print(f"  Run progress: {run_index+1}/{args.generations} generations | "
+                  f"elapsed {format_duration(elapsed)} | estimated remaining {format_duration(remaining)} | "
+                  f"estimated total {format_duration(elapsed + remaining)}", flush=True)
             for rank, model in enumerate(winners, 1):
                 print(f"  {rank:2d}. {model.id} | score {model.points:.1f}/{model.matches} | pool rating {model.metadata['rating']:.0f}")
         print("\nTraining finished. Restart the Java game to load the surviving models.")
