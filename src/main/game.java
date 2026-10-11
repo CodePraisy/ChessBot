@@ -749,7 +749,7 @@ public class game extends JPanel {
             return;
         }
         showThinking(p.name() + " is thinking...");
-        searchLimits limits = searchLimits.forSkill(setup.skill() <= 0 ? 5 : setup.skill());
+        searchLimits limits = searchLimits.standard();
         Position pos = g.current();
         CompletableFuture<Move> f;
         try {

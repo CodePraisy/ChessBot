@@ -6,7 +6,7 @@ set "JAVA=javaw"
 if defined JAVA_HOME set "JAVAC=%JAVA_HOME%\bin\javac"
 if defined JAVA_HOME set "JAVA=%JAVA_HOME%\bin\javaw"
 echo Compiling...
-"%JAVAC%" -d bin -sourcepath src src\chessUI.java
+"%JAVAC%" -d bin -sourcepath src src\chessUI.java src\ai\strengthTest.java src\ai\selfPlayData.java
 if errorlevel 1 (
   echo Compile failed - is JDK 25 installed and on PATH?
   pause

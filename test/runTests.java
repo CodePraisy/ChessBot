@@ -14,6 +14,10 @@ import ai.Suggestion;
 import ai.engineBootstrap;
 import ai.engineRegistry;
 import ai.devRandomEngine;
+import ai.fastBoard;
+import ai.nativeEngine;
+import ai.neuralNet;
+import ai.searchEngine;
 import ai.externalProcessProvider;
 import ai.searchLimits;
 import handlers.Json;
@@ -45,6 +49,7 @@ public class runTests {
         section("Saves");              saveTests();
         section("Review classifier");  classifierTests();
         section("Engines");            engineTests();
+        section("Native engine");      nativeEngineTests();
         section("Multiplayer (loopback)"); netTests();
         System.out.printf("%n%d passed, %d failed (%d s)%n", passed, failed, (System.currentTimeMillis() - t0) / 1000);
         failures.forEach(f -> System.out.println("  FAILED: " + f));
@@ -177,7 +182,7 @@ public class runTests {
         check("dev engine reports loading first", !dev.isAvailable());
         check("dev engine becomes available", waitFor(dev::isAvailable, 3000));
         Position p = Position.start();
-        Move m = dev.chooseMove(p, List.of(), searchLimits.forSkill(3)).get(5, TimeUnit.SECONDS);
+        Move m = dev.chooseMove(p, List.of(), searchLimits.standard()).get(5, TimeUnit.SECONDS);
         check("dev engine returns a legal move", p.isLegal(m));
         List<Suggestion> s = dev.analyze(p, 3).get(5, TimeUnit.SECONDS);
         check("dev engine returns 3 fake suggestions", s.size() == 3 && s.stream().allMatch(x -> p.isLegal(x.move())));
@@ -193,7 +198,7 @@ public class runTests {
         check("checkpoint fixture created without training", createCheckpoint.waitFor(10, TimeUnit.SECONDS) && createCheckpoint.exitValue() == 0);
         externalProcessProvider py = new externalProcessProvider("Saved test model", python, "engine/bridge.py", "--checkpoint", checkpoint.toString());
         check("Python model becomes available", waitFor(py::isAvailable, 20_000));
-        Move pm = py.chooseMove(p, List.of(), searchLimits.forSkill(1)).get(10, TimeUnit.SECONDS);
+        Move pm = py.chooseMove(p, List.of(), new searchLimits(1, 1, 200)).get(10, TimeUnit.SECONDS);
         check("Python model returns a legal move", p.isLegal(pm));
         List<Suggestion> pythonAnalysis = py.analyze(p, 2).get(10, TimeUnit.SECONDS);
         check("Python model provides legal analysis", !pythonAnalysis.isEmpty() && pythonAnalysis.stream().allMatch(x -> p.isLegal(x.move())));
@@ -210,9 +215,10 @@ public class runTests {
         try {
             check("Java discovers ten saved gym models", engineRegistry.providers().size() == 10
                     && engineRegistry.providers().stream().allMatch(x -> x.name().startsWith("model-test-")));
-            check("saved gym models load in Python processes", waitFor(() -> engineRegistry.providers().stream().allMatch(x -> x.isAvailable()), 20_000));
+            check("saved gym models load natively in Java", waitFor(() -> engineRegistry.providers().stream().allMatch(x -> x.isAvailable()), 10_000));
+            Move gm = engineRegistry.providers().get(0).chooseMove(p, List.of(), new searchLimits(10, 3, 500)).get(10, TimeUnit.SECONDS);
+            check("gym model plays a legal move through the Java search", p.isLegal(gm));
         } finally {
-            engineRegistry.providers().forEach(x -> ((externalProcessProvider) x).shutdown());
             engineRegistry.clear();
         }
 
@@ -222,16 +228,109 @@ public class runTests {
         check("external engine: unavailable until it says ready", !ext.isAvailable());
         check("external engine: becomes available after 'ready'", waitFor(ext::isAvailable, 20000));
         Position after = p.play(Move.fromUci("e2e4"));
-        Move em = ext.chooseMove(after, List.of(Move.fromUci("e2e4")), searchLimits.forSkill(5)).get(10, TimeUnit.SECONDS);
+        Move em = ext.chooseMove(after, List.of(Move.fromUci("e2e4")), searchLimits.standard()).get(10, TimeUnit.SECONDS);
         check("external engine: move round trip (engine form)", after.isLegal(em));
         List<Suggestion> lines = ext.analyze(after, 2).get(10, TimeUnit.SECONDS);
         check("external engine: analysis round trip", lines.size() == 2 && after.isLegal(lines.get(0).move()) && lines.get(0).centipawns() != null);
         ext.shutdown();
-        check("searchLimits maps responsive difficulty", searchLimits.forSkill(1).maxDepth() == 1
-                && searchLimits.forSkill(1).maxTimeMs() == 200
-                && searchLimits.forSkill(5).maxDepth() == 2 && searchLimits.forSkill(5).maxTimeMs() == 1000
-                && searchLimits.forSkill(10).maxDepth() == 4 && searchLimits.forSkill(10).maxTimeMs() == 2000
-                && searchLimits.forSkill(42).skillLevel() == 10);
+        check("engines always think at full strength for about two seconds", searchLimits.standard().maxTimeMs() == 2000
+                && searchLimits.standard().maxDepth() >= 32 && searchLimits.standard().skillLevel() == 10);
+    }
+
+    static void nativeEngineTests() throws Exception {
+        String kiwipete = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        check("perft: start position depth 4 = 197281", fastBoard.fromFen(Position.START_FEN).perft(4) == 197281);
+        check("perft: castling/en passant/promotion position depth 3 = 97862", fastBoard.fromFen(kiwipete).perft(3) == 97862);
+        check("perft: endgame position depth 4 = 43238", fastBoard.fromFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").perft(4) == 43238);
+        check("perft: promotion position depth 3 = 62379", fastBoard.fromFen("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8").perft(3) == 62379);
+        // random playout: incremental hash always equals a fresh hash of the same position, and unmake restores it
+        fastBoard f = fastBoard.fromFen(kiwipete);
+        java.util.Random r = new java.util.Random(5);
+        boolean hashes = true;
+        for (int i = 0; i < 200; i++) {
+            int[] list = new int[256];
+            int n = f.generate(list, false), m = 0;
+            for (int k = 0; k < n && m == 0; k++) { int x = list[(k + r.nextInt(n)) % n]; if (f.legal(x)) m = x; }
+            if (m == 0) break;
+            long before = f.hash();
+            f.make(m); f.unmake(m);
+            hashes &= f.hash() == before;
+            f.make(m);
+            hashes &= f.hash() == fastBoard.fromFen(fenOf(f)).hash();
+        }
+        check("engine board: incremental hash matches and unmake restores it", hashes);
+
+        searchEngine s = new searchEngine(neuralNet.classic());
+        check("search finds a back-rank mate", fastBoard.toMove(s.think(fastBoard.fromFen("6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1"), 1000, 64).move()).uci().equals("d1d8"));
+        check("search finds scholar's mate", fastBoard.toMove(s.think(fastBoard.fromFen("r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4"), 1000, 64).move()).uci().equals("h5f7"));
+        check("search takes a hanging queen", fastBoard.toMove(s.think(fastBoard.fromFen("rnb1kbnr/pppp1ppp/8/4p3/3q4/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 1"), 1000, 64).move()).uci().equals("f3d4"));
+        searchEngine.result deep = s.think(fastBoard.fromFen(Position.START_FEN), 1000, 64);
+        check("search reaches depth 6+ in one second (" + deep.depth() + ")", deep.depth() >= 6);
+
+        // Python and Java must evaluate exported models identically (fixtures from engine/make_test_fixtures.py)
+        Path fixtures = Path.of("test/fixtures/neural");
+        neuralNet mlp = neuralNet.mlp(fixtures.resolve("mlp")), gym = neuralNet.gym(fixtures.resolve("gym.npz"));
+        boolean features = true, mlpSame = true, gymSame = true;
+        for (Object o : Json.parse(Files.readString(fixtures.resolve("expected.json"))) instanceof List<?> l ? l : List.of()) {
+            Map<?, ?> e = (Map<?, ?>) o;
+            fastBoard b = fastBoard.fromFen((String) e.get("fen"));
+            float[] x = neuralNet.features(b);
+            List<Long> on = new ArrayList<>();
+            for (int i = 0; i < x.length; i++) if (x[i] != 0) on.add((long) i);
+            features &= on.equals(e.get("features"));
+            mlpSame &= Math.abs(mlp.evaluate(b) - ((Number) e.get("mlp")).doubleValue()) <= 1;
+            gymSame &= Math.abs(gym.evaluate(b) - ((Number) e.get("gym")).intValue()) <= 1;
+        }
+        check("TensorFlow model input features match Python", features);
+        check("TensorFlow model evaluation matches Python", mlpSame);
+        check("gym model evaluation matches Python", gymSame);
+
+        Path models = tempDir("models");
+        Path copy = models.resolve("fixture");
+        Files.createDirectories(copy);
+        for (String name : new String[]{"model.json", "weights.npz"}) Files.copy(fixtures.resolve("mlp").resolve(name), copy.resolve(name));
+        List<nativeEngine> found = engineBootstrap.trainedModels(models);
+        check("trained TensorFlow models are discovered", found.size() == 1 && found.get(0).name().equals("Fixture net"));
+        nativeEngine net = found.get(0);
+        check("TensorFlow model loads", waitFor(net::isAvailable, 5000));
+        Position after = Position.start().play(Move.fromUci("e2e4"));
+        Move nm = net.chooseMove(after, List.of(Move.fromUci("e2e4")), new searchLimits(10, 64, 300)).get(5, TimeUnit.SECONDS);
+        check("TensorFlow model plays a legal move", after.isLegal(nm));
+        List<Suggestion> lines = net.analyze(after, 3).get(10, TimeUnit.SECONDS);
+        check("native analysis gives legal lines best-first", lines.size() == 3 && lines.stream().allMatch(x -> after.isLegal(x.move()))
+                && lines.get(0).moverScore() >= lines.get(1).moverScore());
+
+        nativeEngine classic = engineBootstrap.classic();
+        check("classic engine loads", waitFor(classic::isAvailable, 5000));
+        gameState g = new gameState();
+        boolean legalGame = true;
+        while (!g.isOver() && g.plyCount() < 24) {
+            Move m = classic.chooseMove(g.current(), g.moves(), new searchLimits(10, 64, 60)).get(5, TimeUnit.SECONDS);
+            legalGame &= g.play(m);
+        }
+        check("classic engine plays a legal game", legalGame && g.plyCount() > 0);
+        fastBoard history = nativeEngine.boardFor(g.current(), g.moves());
+        check("search board includes the game history (repetition aware)", history.hash() == fastBoard.from(g.current()).hash());
+    }
+
+    static String fenOf(fastBoard f) {
+        StringBuilder sb = new StringBuilder();
+        for (int row = 0; row < 8; row++) {
+            int empty = 0;
+            for (int col = 0; col < 8; col++) {
+                int p = f.pieceAt(row * 8 + col);
+                if (p == 0) { empty++; continue; }
+                if (empty > 0) { sb.append(empty); empty = 0; }
+                char c = " pnbrqk".charAt(Math.abs(p));
+                sb.append(p > 0 ? Character.toUpperCase(c) : c);
+            }
+            if (empty > 0) sb.append(empty);
+            if (row < 7) sb.append('/');
+        }
+        int c = f.castlingRights();
+        String rights = ((c & 1) != 0 ? "K" : "") + ((c & 2) != 0 ? "Q" : "") + ((c & 4) != 0 ? "k" : "") + ((c & 8) != 0 ? "q" : "");
+        String ep = f.epSquare() < 0 ? "-" : Position.squareName(f.epSquare());
+        return sb + " " + (f.sideToMove() == 1 ? "w" : "b") + " " + (rights.isEmpty() ? "-" : rights) + " " + ep + " " + f.halfmoveClock() + " 1";
     }
 
     // ---------------------------------------------------------------- multiplayer

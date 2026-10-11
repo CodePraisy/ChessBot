@@ -42,7 +42,7 @@ public class gameMenu extends JPanel {
         c.insets = new Insets(0, 40, 40, 40);
         if (aiMode) {
             options.add(modeCard("src/assets/desktop_logo2.png", "Player vs AI", "Challenge the Computer",
-                    "Play against an AI opponent. Great for practice, learning new strategies, or testing your skills against different difficulty levels.",
+                    "Play against an AI opponent. Great for practice, learning new strategies, or testing your skills against different AI models.",
                     style.BLUE, this::startPlayerVsAI), c);
             options.add(modeCard("src/assets/sever_logo.png", "AI vs AI", "Watch the Bots Battle",
                     "Let two AIs face off and observe their strategies in action. Great for learning, testing engine strength, or just enjoying an automated match.",
@@ -112,15 +112,12 @@ public class gameMenu extends JPanel {
         p.add(style.label("AI model:", Font.BOLD, 20));
         JComboBox<String> model = new JComboBox<>(models);
         p.add(model);
-        p.add(style.label("Difficulty (1-10):", Font.BOLD, 20));
-        JSlider skill = skillSlider();
-        p.add(skill);
         style.deepFont(colour, style.font(Font.PLAIN, 18));
         style.deepFont(model, style.font(Font.PLAIN, 18));
         if (style.choose(this, "Player vs AI", p, "Start", "Cancel") != 0) return;
         int c = colour.getSelectedIndex() == 0 ? Position.WHITE : colour.getSelectedIndex() == 1 ? Position.BLACK
                 : (Math.random() < 0.5 ? Position.WHITE : Position.BLACK);
-        window.startGame(gameSetup.vsAi(c, skill.getValue(), (String) model.getSelectedItem()));
+        window.startGame(gameSetup.vsAi(c, 0, (String) model.getSelectedItem()));
     }
 
     private void startAIvsAI() {
@@ -134,23 +131,10 @@ public class gameMenu extends JPanel {
         p.add(style.label("Black engine:", Font.BOLD, 20));
         JComboBox<String> black = new JComboBox<>(names);
         p.add(black);
-        p.add(style.label("Strength (1-10):", Font.BOLD, 20));
-        JSlider skill = skillSlider();
-        p.add(skill);
         style.deepFont(white, style.font(Font.PLAIN, 18));
         style.deepFont(black, style.font(Font.PLAIN, 18));
         if (style.choose(this, "AI vs AI", p, "Start", "Cancel") != 0) return;
-        window.startGame(gameSetup.aiVsAi((String) white.getSelectedItem(), (String) black.getSelectedItem(), skill.getValue()));
+        window.startGame(gameSetup.aiVsAi((String) white.getSelectedItem(), (String) black.getSelectedItem(), 0));
     }
 
-    private static JSlider skillSlider() {
-        JSlider s = new JSlider(1, 10, 5);
-        s.setMajorTickSpacing(1);
-        s.setPaintTicks(true);
-        s.setPaintLabels(true);
-        s.setSnapToTicks(true);
-        s.setFont(style.font(Font.PLAIN, 14));
-        s.setPreferredSize(new Dimension(380, 50));
-        return s;
-    }
 }

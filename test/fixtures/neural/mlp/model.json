@@ -1,0 +1,17 @@
+{
+  "format": "chessbot-mlp",
+  "version": 2,
+  "features": "mover772",
+  "scale": 400.0,
+  "activation": "relu",
+  "layers": [
+    772,
+    16,
+    8,
+    1
+  ],
+  "name": "Fixture net",
+  "size": "fixture",
+  "trained_positions": 0,
+  "parameters": 12513
+}

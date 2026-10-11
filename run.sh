@@ -13,7 +13,7 @@ case "$(uname -s)" in
 esac
 
 echo "Compiling..."
-if ! "$JAVAC" -d bin -sourcepath src src/chessUI.java; then
+if ! "$JAVAC" -d bin -sourcepath src src/chessUI.java src/ai/strengthTest.java src/ai/selfPlayData.java; then
   echo "Compile failed (is JDK 25 installed and on PATH?)."
   read -rp "Press Enter to close." _
   exit 1
