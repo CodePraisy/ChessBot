@@ -1,5 +1,10 @@
 # Python training gym
 
+> For stronger play, use the TensorFlow models trained on Lichess data ([TRAINING_TF.md](TRAINING_TF.md)).
+> The gym still works. Its ten survivors now play through the Java search like every other engine
+> (`-Dchessbot.pythonGym=true` restores the Python bridge). Old generations were deleted on
+> 2026-10-11 to save space; only the current generation (ten checkpoints and its replay) remains.
+
 Run from the project folder in PowerShell:
 
 ```powershell

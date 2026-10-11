@@ -1,10 +1,23 @@
 # ChessBot
 
-A Java chess game with a Python self-play training gym. The gym trains neural value
-networks, retains the best ten active models, and publishes checkpoints for the Java
-game. Training runs only when you start the Python trainer.
+A Java chess game with its own engine. Opponents are TensorFlow value networks trained on
+Lichess positions scored by Stockfish (five sizes, from super-small to larger), a hand-written
+"Classic engine", and the ten survivors of the original self-play gym. Every engine runs in a
+fast alpha-beta search inside the Java app, with quiescence search, a transposition table and
+pruning. Engines always play at full strength for about 2 seconds a move.
 
-## Run the current version
+**Train the TensorFlow models:** see [docs/TRAINING_TF.md](docs/TRAINING_TF.md). In short:
+
+```powershell
+.\engine\venv\Scripts\python.exe -m pip install -r engine/requirements-tf.txt
+.\engine\venv\Scripts\python.exe engine/lichess_data.py evals --positions 2000000
+.\engine\venv\Scripts\python.exe engine/train_tf.py --size small
+java -cp "bin;src" ai.strengthTest --league --games 10
+```
+
+Nothing trains unless you run these commands. Run `run.bat` once first so `bin` is compiled.
+
+## The original self-play gym
 
 From the project folder in PowerShell:
 
@@ -28,6 +41,15 @@ Java reads the ten models listed in `engine/models/gym/champions.json`; dropping
 unlisted model files into a folder does not register them.
 
 ## Implementation roadmap
+
+**Status (2026-10-11):** the plan changed to supervised training on Lichess data; see
+[TRAINING_TF.md](docs/TRAINING_TF.md). Done so far:
+- Measurement: `ai.strengthTest` covers matches, a league, Stockfish at a set Elo, and rated puzzles.
+- Learning data: Lichess Stockfish evaluations with a fixed validation split, plus self-play data scored by search.
+- Faster evaluation: networks run in Java from sparse inputs (only the occupied squares are added up).
+- Lookahead: a real alpha-beta search for play and for self-play data.
+- Direct Java inference: no Python process is needed to play.
+The original phase notes below are kept for reference.
 
 **These phases are proposals, not implemented features.** Research and local
 inspection were performed on October 10, 2026. The development machine has a

@@ -29,3 +29,7 @@ Thumbs.db
 
 # Local training checkpoints, replay buffers and self-play logs
 /engine/models/gym/
+
+# Lichess training data, self-play data and trained TensorFlow models (large, regenerated locally)
+/engine/data/
+/engine/models/tf/
