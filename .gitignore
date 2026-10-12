@@ -34,3 +34,6 @@ Thumbs.db
 /engine/data/
 /engine/models/tf/
 /engine/models/tf-gym/
+
+# Stockfish download (python engine/get_stockfish.py)
+/engine/stockfish/

@@ -116,7 +116,7 @@ public class reviewPanel extends JPanel {
         progress.setFont(style.font(Font.PLAIN, 13));
         add(side, progress, 22);
         summary.setVerticalAlignment(SwingConstants.TOP);
-        add(side, summary, 60);
+        add(side, summary, 96);
         side.add(Box.createVerticalGlue());
         add(side, style.button(backToLibrary ? "Back to Saved Games" : "Back to Menu", style.RED, 20,
                 () -> { cancelAnalysis(); if (backToLibrary) window.showSavedGames(); else window.showMenu(); }), 44);
@@ -408,10 +408,25 @@ public class reviewPanel extends JPanel {
         recomputeMarks();
     }
 
+    /** "You (White): 84% accuracy, game rating ~1650 (overall ~1520, 6 games) | 2 inaccuracies, ..." */
+    private static String ratingLine(String name, String colour, gameRating.side s, int[] counts, boolean complete) {
+        StringBuilder t = new StringBuilder("<b>").append(esc(name)).append("</b> (").append(colour).append("): ");
+        if (s.moves() > 0) {
+            t.append(String.format("%.0f%% accuracy, game rating ~%d", s.accuracy(), s.rating()));
+            Integer overall = gameRating.overall(name);
+            if (complete && overall != null)
+                t.append(String.format(" (overall ~%d, %d game%s)", overall, gameRating.games(name), gameRating.games(name) == 1 ? "" : "s"));
+            if (!complete) t.append(" so far");
+            t.append("<br>&nbsp;&nbsp;");
+        }
+        return t.append(counts[1]).append(" inaccuracies, ").append(counts[2]).append(" mistakes, ").append(counts[3]).append(" blunders").toString();
+    }
+
     /** Marks each move whose before/after evaluations are known with ?!, ? or ??. */
     private void recomputeMarks() {
         list.clearMarks();
         int[][] counts = new int[2][4];
+        gameRating.tally[] tallies = {new gameRating.tally(), new gameRating.tally()};
         int marked = 0;
         for (int p = 1; p <= g.plyCount(); p++) {
             List<Suggestion> before = cached(p - 1);
@@ -427,11 +442,19 @@ public class reviewPanel extends JPanel {
             moveClassifier.Quality q = before.get(0).move().equals(g.move(p - 1)) ? moveClassifier.Quality.GOOD
                     : moveClassifier.classify(before.get(0).moverScore(), after);
             list.setMark(p, moveClassifier.symbol(q).isEmpty() ? null : moveClassifier.symbol(q), moveClassifier.color(q));
-            counts[prev.sideToMove() == Position.WHITE ? 0 : 1][q.ordinal()]++;
+            int who = prev.sideToMove() == Position.WHITE ? 0 : 1;
+            counts[who][q.ordinal()]++;
+            tallies[who].add(before.get(0).moverScore(), after, before.get(0).move().equals(g.move(p - 1)));
             marked++;
         }
         if (marked == 0) { summary.setText(" "); return; }
-        summary.setText("<html>White: " + counts[0][1] + " inaccuracies, " + counts[0][2] + " mistakes, " + counts[0][3] + " blunders<br>"
-                + "Black: " + counts[1][1] + " inaccuracies, " + counts[1][2] + " mistakes, " + counts[1][3] + " blunders</html>");
+        gameRating.side w = tallies[0].result(), b = tallies[1].result();
+        boolean complete = marked == g.plyCount() && save.isFinished();
+        if (complete) { // every move analysed: this game counts towards both players' overall ratings
+            gameRating.save(save.whiteName, save.gameId, w);
+            gameRating.save(save.blackName, save.gameId, b);
+        }
+        summary.setText("<html>" + ratingLine(save.whiteName, "White", w, counts[0], complete) + "<br>"
+                + ratingLine(save.blackName, "Black", b, counts[1], complete) + "</html>");
     }
 }

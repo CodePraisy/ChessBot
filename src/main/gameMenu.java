@@ -108,7 +108,7 @@ public class gameMenu extends JPanel {
         JComboBox<String> colour = new JComboBox<>(new String[]{"White", "Black", "Random"});
         p.add(colour);
         List<moveProvider> providers = engineRegistry.providers();
-        String[] models = providers.stream().map(moveProvider::name).toArray(String[]::new);
+        String[] models = providers.stream().map(m -> review.gameRating.label(m.name())).toArray(String[]::new);
         p.add(style.label("AI model:", Font.BOLD, 20));
         JComboBox<String> model = new JComboBox<>(models);
         p.add(model);
@@ -117,13 +117,13 @@ public class gameMenu extends JPanel {
         if (style.choose(this, "Player vs AI", p, "Start", "Cancel") != 0) return;
         int c = colour.getSelectedIndex() == 0 ? Position.WHITE : colour.getSelectedIndex() == 1 ? Position.BLACK
                 : (Math.random() < 0.5 ? Position.WHITE : Position.BLACK);
-        window.startGame(gameSetup.vsAi(c, 0, (String) model.getSelectedItem()));
+        window.startGame(gameSetup.vsAi(c, 0, providers.get(model.getSelectedIndex()).name()));
     }
 
     private void startAIvsAI() {
         List<moveProvider> providers = engineRegistry.providers();
         if (providers.isEmpty()) { mainWindow.showNoEngineDialog(this); return; }
-        String[] names = providers.stream().map(moveProvider::name).toArray(String[]::new);
+        String[] names = providers.stream().map(m -> review.gameRating.label(m.name())).toArray(String[]::new);
         JPanel p = new JPanel(new GridLayout(0, 1, 0, 8));
         p.add(style.label("White engine:", Font.BOLD, 20));
         JComboBox<String> white = new JComboBox<>(names);
@@ -134,7 +134,7 @@ public class gameMenu extends JPanel {
         style.deepFont(white, style.font(Font.PLAIN, 18));
         style.deepFont(black, style.font(Font.PLAIN, 18));
         if (style.choose(this, "AI vs AI", p, "Start", "Cancel") != 0) return;
-        window.startGame(gameSetup.aiVsAi((String) white.getSelectedItem(), (String) black.getSelectedItem(), 0));
+        window.startGame(gameSetup.aiVsAi(providers.get(white.getSelectedIndex()).name(), providers.get(black.getSelectedIndex()).name(), 0));
     }
 
 }

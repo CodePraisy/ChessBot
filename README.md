@@ -20,12 +20,20 @@ This compiles the game and starts it. Press **F11** for fullscreen. Multiplayer 
 
 | Opponent | What it is |
 |---|---|
-| **Neural small / medium / large...** | TensorFlow networks you train yourself (appear after training) |
-| **Neural gym champion** | The winner of the model gym (appears after you run it) |
+| **Neural small-0000001...** | TensorFlow networks you train yourself (appear after training) |
+| **Neural gym-small-0000002...** | Each size's gym winner (appears after you run the gym) |
 | **Classic engine** | Hand-written evaluation, no training needed |
 | **Gym survivors** | The ten models from the original self-play gym |
+| **Stockfish 1320 / 1600 / 2000 / 2500 / full** | The real Stockfish, to compare against. Get it once with `python engine/get_stockfish.py` |
 
-All of them play at full strength, about 2 seconds a move.
+All of them play at full strength. Thinking time per move (default 2 s) is in **Settings > Engines**;
+shorter is faster but plays weaker.
+
+**Ratings:** after a game, open **Review** and press **Analyze game**. Each side gets an accuracy and a
+game rating (an Elo-like estimate from how much each move lost against the best move). Your overall
+rating and each engine's is the average of its last 20 analysed games, shown next to engine names in the
+menus. The estimate is rough: it is most reliable with Stockfish installed, since full-strength Stockfish
+then does the analysis.
 
 ## Train your own
 

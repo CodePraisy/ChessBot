@@ -13,7 +13,8 @@ import handlers.Json;
  * Connects the engines at startup. All of them run natively in Java (searchEngine):
  *  1. TensorFlow models trained on Lichess data (engine/models/tf/<size>/), best-trained first;
  *  2. "Classic engine", a hand-written evaluation that needs no training;
- *  3. the ten survivors of the original self-play gym (engine/models/gym/champions.json).
+ *  3. Stockfish at several fixed ratings, if engine/stockfish/ has it (python engine/get_stockfish.py);
+ *  4. the ten survivors of the original self-play gym (engine/models/gym/champions.json).
  * The first one is the default opponent. -Dchessbot.pythonGym=true runs the gym models through the
  * old Python bridge instead.
  */
@@ -25,6 +26,11 @@ public final class engineBootstrap {
         Path gym = Path.of(System.getProperty("chessbot.gym", "engine/models/gym"));
         for (moveProvider p : trainedModels(models)) register(p);
         register(classic());
+        Path stockfish = uciEngine.find();
+        if (stockfish != null) for (uciEngine e : uciEngine.levels(stockfish)) {
+            engineRegistry.addEngine(e);
+            if (e.elo() == null) engineRegistry.registerAnalysis(e); // best judge of moves for Review and ratings
+        }
         if (Boolean.getBoolean("chessbot.pythonGym")) installPythonFrom(gym);
         else installFrom(gym);
     }

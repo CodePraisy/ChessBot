@@ -25,7 +25,7 @@ import rules.gameState;
  *
  *   java -cp "bin;src" ai.strengthTest --list
  *   java -cp "bin;src" ai.strengthTest --engine "Neural small" --vs "Classic engine" --games 20
- *   java -cp "bin;src" ai.strengthTest --engine "Neural small" --vs stockfish --stockfish C:\stockfish\stockfish.exe --elo 1320
+ *   java -cp "bin;src" ai.strengthTest --engine "Neural small" --vs stockfish --elo 1320   (uses engine/stockfish, or --stockfish path)
  *   java -cp "bin;src" ai.strengthTest --engine "Neural small" --puzzles engine/data/puzzles.csv --limit 400
  *   java -cp "bin;src" ai.strengthTest --league --games 4          (every trained model + Classic, round robin)
  *
@@ -133,7 +133,7 @@ public final class strengthTest {
         String vs = opt.getOrDefault("vs", "Classic engine");
         try (player a = new nativePlayer(engine);
              player b = vs.equalsIgnoreCase("stockfish")
-                     ? new uciPlayer(require(opt, "stockfish"), opt.containsKey("elo") ? Integer.valueOf(opt.get("elo")) : null)
+                     ? new uciPlayer(opt.containsKey("stockfish") || uciEngine.find() == null ? require(opt, "stockfish") : uciEngine.find().toString(), opt.containsKey("elo") ? Integer.valueOf(opt.get("elo")) : null)
                      : new nativePlayer(pick(engines, vs))) {
             match(a, b, games, time, true);
         }

@@ -49,6 +49,9 @@ public class settingsPanel extends JPanel {
         }));
         row(card, "Sound effects", toggle("audio.soundEffects", false, null));
 
+        section(card, "Engines");
+        row(card, "Thinking time per move", thinkBox());
+
         section(card, "Saving");
         row(card, "Save game when closing", toggle("saves.saveState", false, null));
         row(card, "Offer to resume last game", toggle("saves.useSaveState", false, null));
@@ -147,6 +150,27 @@ public class settingsPanel extends JPanel {
             p.add(sw);
         }
         return p;
+    }
+
+    /** Shorter time = faster replies but a shallower search (weaker play). Applies from the next move. */
+    private static JComponent thinkBox() {
+        long[] choices = ai.searchLimits.CHOICES;
+        String[] labels = new String[choices.length];
+        for (int i = 0; i < choices.length; i++)
+            labels[i] = choices[i] < 1000 ? (choices[i] / 1000.0) + " s" : (choices[i] / 1000) + " s";
+        JComboBox<String> box = new JComboBox<>(labels);
+        long now = ai.searchLimits.thinkMs();
+        int pick = 0;
+        for (int i = 0; i < choices.length; i++) if (Math.abs(choices[i] - now) < Math.abs(choices[pick] - now)) pick = i;
+        box.setSelectedIndex(pick);
+        box.setPreferredSize(new Dimension(230, 40));
+        box.setFont(style.font(Font.PLAIN, 18));
+        box.setToolTipText("Shorter is faster but the engine looks fewer moves ahead");
+        box.addActionListener(_ -> {
+            style.click();
+            configHandler.setConfigString("engine.thinkMs", String.valueOf(choices[box.getSelectedIndex()]));
+        });
+        return box;
     }
 
     private static JComponent fontBox(mainWindow window) {

@@ -85,12 +85,12 @@ java -cp "bin;src" ai.strengthTest --list
 java -cp "bin;src" ai.strengthTest --league --games 10                          # all trained models + Classic
 java -cp "bin;src" ai.strengthTest --engine "Neural small" --vs "Classic engine" --games 20
 java -cp "bin;src" ai.strengthTest --engine "Neural small" --puzzles engine/data/puzzles.csv --limit 400
-java -cp "bin;src" ai.strengthTest --engine "Neural small" --vs stockfish --stockfish C:\stockfish\stockfish.exe --elo 1320 --games 20
+java -cp "bin;src" ai.strengthTest --engine "Neural small" --vs stockfish --elo 1320 --games 20
 ```
 
 (Run `run.bat` once first so `bin` is compiled.)
 
-- Stockfish is free from stockfishchess.org. With `--elo`, it plays at that rating; **1320 is the lowest
+- Get Stockfish once with `python engine/get_stockfish.py` (or pass `--stockfish path\to\stockfish.exe`). With `--elo`, it plays at that rating; **1320 is the lowest
   setting**, about your level. Beating Stockfish at 1320 over 20+ games is a fair "can it beat me" test.
 - Games use fixed openings, and each is played once with each colour. The result shows a 95% range: with
   20 games that range is wide, so use 40+ games before trusting small differences.
