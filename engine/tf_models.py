@@ -87,9 +87,13 @@ def export(model, folder: Path, info: dict) -> None:
 
 
 def model_tag(size: str) -> str:
-    """A name like small-4821937: the size plus a random 7-digit number."""
-    import random
-    return f"{size}-{random.randint(1_000_000, 9_999_999)}"
+    """A name like small-0000042. One counter (engine/models/tf/counter.json) is shared by every model,
+    so each new model gets the next number and no two ever share one."""
+    path = MODELS / "counter.json"
+    MODELS.mkdir(parents=True, exist_ok=True)
+    n = (json.loads(path.read_text()).get("last", 0) if path.exists() else 0) + 1
+    _atomic(path, lambda tmp: tmp.write_text(json.dumps({"last": n})))
+    return f"{size}-{n:07d}"
 
 
 def load_exported(folder: Path) -> tuple[list[np.ndarray], dict]:
