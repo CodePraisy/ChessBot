@@ -34,6 +34,7 @@ pip install -r engine/requirements-tf.txt
 python engine/lichess_data.py evals --positions 2000000     # download scored positions
 python engine/train_tf.py --size small                      # train a model
 python engine/gym_tf.py start && python engine/gym_tf.py refine   # optional: variants fight each other
+python engine/train_cycle.py --epochs 8 --generations 5     # or everything: all sizes, then a gym per size
 java -cp "bin;src" ai.strengthTest --league --games 10      # measure who is strongest
 ```
 

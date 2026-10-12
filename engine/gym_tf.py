@@ -45,6 +45,7 @@ from train_tf import DATA, count, cp_error, shards, smoke_data, train_dataset, v
 
 ROOT = Path(__file__).resolve().parent.parent
 GYM = Path(__file__).resolve().parent / "models" / "tf-gym"
+CHAMPION = "gym-champion"  # folder in engine/models/tf the leader is copied to (--champion)
 CLASSIC = "Classic engine"
 
 
@@ -425,16 +426,17 @@ def write_history(folder: Path, state: dict) -> None:
 
 def promote_member(folder: Path, state: dict, member: dict) -> None:
     source = member_dir(folder, member)
-    out = MODELS / "gym-champion"
+    out = MODELS / CHAMPION
+    label = "Neural " + CHAMPION.replace("-", " ")
     out.mkdir(parents=True, exist_ok=True)
     for name in ("weights.npz", "model.keras"):
         shutil.copy2(source / name, out / name)
     meta = json.loads((source / "model.json").read_text())
-    meta.update(name="Neural gym champion", gym_member=member["id"], gym_round=state["round"])
+    meta.update(name=label, gym_member=member["id"], gym_round=state["round"])
     (out / "model.json").write_text(json.dumps(meta, indent=2))
     state["champion"] = member["id"]
     save_state(folder, state)
-    print(f"Gym {member['id']} is now 'Neural gym champion' in the game ({out})")
+    print(f"Gym {member['id']} is now '{label}' in the game ({out})")
 
 
 def promote(args):
@@ -467,8 +469,11 @@ def status(args):
 # ---------------------------------------------------------------- command line
 
 def main(argv=None):
+    global CHAMPION
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dir", type=Path, default=GYM, help="gym folder (default engine/models/tf-gym)")
+    p.add_argument("--champion", default=CHAMPION,
+                   help="name of the leader's folder in engine/models/tf; shown in the game as 'Neural <name>'")
     sub = p.add_subparsers(dest="command", required=True)
     s = sub.add_parser("start", help="stage 1: train the population on Lichess positions")
     s.add_argument("--population", type=int, default=8)
@@ -502,6 +507,7 @@ def main(argv=None):
     sub.add_parser("status", help="show the population and round history")
     sub.add_parser("promote", help="copy the current leader into the game as 'Neural gym champion'")
     args = p.parse_args(argv)
+    CHAMPION = args.champion
     if args.command == "start":
         if args.population < 2 or args.epochs < 1:
             p.error("population must be at least 2 and epochs at least 1")
