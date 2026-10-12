@@ -24,7 +24,7 @@ import time
 import numpy as np
 
 from tf_features import COMPACT, CP_LIMIT, SCALE, target, tf_expand
-from tf_models import MODELS, SIZES, build, export, parameter_count
+from tf_models import MODELS, SIZES, build, export, model_tag, parameter_count
 
 DATA = Path(__file__).resolve().parent / "data" / "lichess"
 
@@ -141,6 +141,7 @@ def train(args):
     model.compile(optimizer=tf.keras.optimizers.Adam(schedule),
                   loss=tf.keras.losses.BinaryCrossentropy(from_logits=True), metrics=[cp_error])
 
+    tag = previous.get("tag") or model_tag(args.size)
     state = {"epochs": previous.get("epochs", 0), "trained_positions": previous.get("trained_positions", 0)}
     source = {}
     if (data / "data.json").exists():
@@ -159,7 +160,7 @@ def train(args):
                         loss=logs.get("loss"), cp_error=logs.get("cp_error"),
                         val_loss=logs.get("val_loss"), val_cp_error=logs.get("val_cp_error"),
                         data=source if not args.smoke else {"source": "synthetic smoke test"},
-                        batch=args.batch, learning_rate=args.lr, name=f"Neural {args.size}")
+                        batch=args.batch, learning_rate=args.lr, tag=tag, name=f"Neural {tag}")
             export(self.model, out, info)
             log = out / "train_log.csv"
             new = not log.exists()

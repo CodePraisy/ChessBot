@@ -86,6 +86,12 @@ def export(model, folder: Path, info: dict) -> None:
     _atomic(folder / "model.json", lambda path: path.write_text(json.dumps(meta, indent=2)))
 
 
+def model_tag(size: str) -> str:
+    """A name like small-4821937: the size plus a random 7-digit number."""
+    import random
+    return f"{size}-{random.randint(1_000_000, 9_999_999)}"
+
+
 def load_exported(folder: Path) -> tuple[list[np.ndarray], dict]:
     meta = json.loads((Path(folder) / "model.json").read_text())
     if meta.get("format") != FORMAT or meta.get("version") != VERSION:

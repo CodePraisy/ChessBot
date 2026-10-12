@@ -40,7 +40,7 @@ import time
 import numpy as np
 
 from tf_features import target, tf_expand
-from tf_models import MODELS, SIZES, build, export
+from tf_models import MODELS, SIZES, build, export, model_tag
 from train_tf import DATA, count, cp_error, shards, smoke_data, train_dataset, validation_dataset
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -427,12 +427,14 @@ def write_history(folder: Path, state: dict) -> None:
 def promote_member(folder: Path, state: dict, member: dict) -> None:
     source = member_dir(folder, member)
     out = MODELS / CHAMPION
-    label = "Neural " + CHAMPION.replace("-", " ")
+    if "tag" not in member:
+        member["tag"] = model_tag(CHAMPION)
+    label = f"Neural {member['tag']}"
     out.mkdir(parents=True, exist_ok=True)
     for name in ("weights.npz", "model.keras"):
         shutil.copy2(source / name, out / name)
     meta = json.loads((source / "model.json").read_text())
-    meta.update(name=label, gym_member=member["id"], gym_round=state["round"])
+    meta.update(name=label, tag=member["tag"], gym_member=member["id"], gym_round=state["round"])
     (out / "model.json").write_text(json.dumps(meta, indent=2))
     state["champion"] = member["id"]
     save_state(folder, state)
