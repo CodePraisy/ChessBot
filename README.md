@@ -24,7 +24,7 @@ This compiles the game and starts it. Press **F11** for fullscreen. Multiplayer 
 | **Neural gym-small-0000002...** | Each size's gym winner (appears after you run the gym) |
 | **Classic engine** | Hand-written evaluation, no training needed |
 | **Gym survivors** | The ten models from the original self-play gym |
-| **Stockfish 1320 / 1600 / 2000 / 2500 / full** | The real Stockfish, to compare against. Get it once with `python engine/get_stockfish.py` |
+| **Stockfish 1320 / 1600 / 2000 / 2500 / full** | The real Stockfish, to compare against. Downloaded automatically the first time the game starts (needs internet once) |
 
 All of them play at full strength. Thinking time per move (default 2 s) is in **Settings > Engines**;
 shorter is faster but plays weaker.
@@ -42,7 +42,7 @@ pip install -r engine/requirements-tf.txt
 python engine/lichess_data.py evals --positions 2000000     # download scored positions
 python engine/train_tf.py --size small                      # train a model
 python engine/gym_tf.py start && python engine/gym_tf.py refine   # optional: variants fight each other
-python engine/train_cycle.py --epochs 8 --generations 5     # or everything: all sizes, then a gym per size
+python engine/train_cycle.py --epochs 8 --generations 5     # or everything: each size, then a gym per size where only the winner survives
 java -cp "bin;src" ai.strengthTest --league --games 10      # measure who is strongest
 ```
 

@@ -321,7 +321,8 @@ def refine(args):
         for _ in range(args.rounds):
             league = tournament(args, folder, state)
             ranked = standings(league, state)
-            keep = max(1, math.ceil(len(ranked) * args.keep))
+            keep = args.survivors or max(1, math.ceil(len(ranked) * args.keep))
+            keep = max(1, min(keep, len(ranked)))
             survivors, losers = ranked[:keep], ranked[keep:]
             leader = survivors[0]
             vs_classic = classic_score(league, f"Gym {leader['id']}")
@@ -494,6 +495,8 @@ def main(argv=None):
     r.add_argument("--time", type=int, default=250, help="ms per move in tournaments")
     r.add_argument("--threads", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     r.add_argument("--keep", type=float, default=0.5, help="fraction of the population that survives a round")
+    r.add_argument("--survivors", type=int, default=0,
+                   help="exactly this many survive each round (overrides --keep); the rest are replaced by their children")
     r.add_argument("--selfplay-games", type=int, default=100)
     r.add_argument("--selfplay-depth", type=int, default=7)
     r.add_argument("--selfplay-time", type=int, default=2000, help="ms cap per self-play move")

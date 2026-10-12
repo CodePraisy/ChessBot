@@ -8,9 +8,12 @@
 For each size:
   1. main training: engine/models/tf/<size> is trained up to --epochs epochs ("Neural <size>")
   2. gym start: a population of variants of that size, in engine/models/tf-gym/<size>
-  3. gym refine: up to --generations tournament rounds; the leader is published as "Neural gym <size>"
+  3. gym refine: up to --generations rounds. Each round the variants of that size play a tournament
+     (only against each other, plus Classic engine as a fixed yardstick), only the winner survives,
+     and the empty places are refilled with new variants of the winner (fine-tuned on its self-play).
+     The winner is published as "Neural gym-<size>-0000123".
 
-Each gym only holds one size, so every class of model gets its own champion.
+Sizes never play each other: small variants only compete with small variants, and so on.
 Ctrl+C is safe. Running the same command again skips finished work and continues where it stopped;
 raising --epochs or --generations later trains the extra epochs / rounds only.
 Run run.bat once first: the gym tournaments use the compiled Java engine.
@@ -59,6 +62,7 @@ def main(argv=None):
     p.add_argument("--gym-epochs", type=int, default=2, help="epochs for each gym variant in stage 1")
     p.add_argument("--gym-positions", type=int, default=2_000_000, help="positions per epoch for gym variants")
     p.add_argument("--games", type=int, default=4, help="tournament games per pairing")
+    p.add_argument("--survivors", type=int, default=1, help="variants of each size kept each generation")
     p.add_argument("--threads", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     p.add_argument("--selfplay-games", type=int, default=100)
     p.add_argument("--no-gym", action="store_true", help="main training only")
@@ -104,7 +108,7 @@ def main(argv=None):
             print(f"Gym {size}: {args.generations} generations already done, skipping")
             continue
         run(gym + ["refine", "--rounds", left, "--games", args.games, "--threads", args.threads,
-                   "--selfplay-games", args.selfplay_games, "--quiet"], args.dry_run)
+                   "--selfplay-games", args.selfplay_games, "--survivors", args.survivors, "--quiet"], args.dry_run)
 
     print("\nCycle finished. Restart the game to see the new models.")
 

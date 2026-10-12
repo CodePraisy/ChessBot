@@ -13,7 +13,7 @@ import handlers.Json;
  * Connects the engines at startup. All of them run natively in Java (searchEngine):
  *  1. TensorFlow models trained on Lichess data (engine/models/tf/<size>/), best-trained first;
  *  2. "Classic engine", a hand-written evaluation that needs no training;
- *  3. Stockfish at several fixed ratings, if engine/stockfish/ has it (python engine/get_stockfish.py);
+ *  3. Stockfish at several fixed ratings (engine/stockfish/, downloaded automatically on first start);
  *  4. the ten survivors of the original self-play gym (engine/models/gym/champions.json).
  * The first one is the default opponent. -Dchessbot.pythonGym=true runs the gym models through the
  * old Python bridge instead.
@@ -27,12 +27,22 @@ public final class engineBootstrap {
         for (moveProvider p : trainedModels(models)) register(p);
         register(classic());
         Path stockfish = uciEngine.find();
-        if (stockfish != null) for (uciEngine e : uciEngine.levels(stockfish)) {
-            engineRegistry.addEngine(e);
-            if (e.elo() == null) engineRegistry.registerAnalysis(e); // best judge of moves for Review and ratings
+        if (stockfish != null) installStockfish(stockfish);
+        else if (!"false".equals(System.getProperty("chessbot.stockfishDownload"))) {
+            Thread t = new Thread(() -> { Path p = stockfishDownload.fetch(); if (p != null) installStockfish(p); }, "stockfish-download");
+            t.setDaemon(true);
+            t.start(); // first start only: the Stockfish opponents appear in the menus once the download finishes
         }
         if (Boolean.getBoolean("chessbot.pythonGym")) installPythonFrom(gym);
         else installFrom(gym);
+    }
+
+    /** Stockfish 1320 ... full strength as opponents; full strength also analyses games in Review. */
+    public static void installStockfish(Path exe) {
+        for (uciEngine e : uciEngine.levels(exe)) {
+            engineRegistry.addEngine(e);
+            if (e.elo() == null) engineRegistry.registerAnalysis(e); // best judge of moves for Review and ratings
+        }
     }
 
     private static void register(moveProvider p) {
