@@ -109,6 +109,45 @@ python engine/train_tf.py --size medium --resume --data engine/data/selfplay --l
 
 Then compare the refined model against a copy of the old one with `strengthTest`. Keep it only if it scores better.
 
+## 7. The gym: many variants, then let them fight (after the main training)
+
+`engine/gym_tf.py` trains a group of models and keeps the ones that win games.
+
+**Stage 1 (`start`):** trains a population of variants on Lichess. Each one gets slightly different
+settings (learning rate, batch size, regularisation, layer widths, random seed) and its own random slice of
+the data. If you've already trained a main model (step 3), the variants start from a copy of it, and the
+main model itself joins unchanged, so the gym can't end up worse than what you started with.
+
+**Stage 2 (`refine`):** repeats these steps each round:
+1. Tournament: every member plays every other member, and Classic engine plays them all as a fixed yardstick.
+2. The bottom half is deleted.
+3. Each survivor plays itself, and its deeper search scores those positions.
+4. Children are copies of survivors, fine-tuned on that self-play data mixed with fresh Lichess positions
+   (so they don't forget what they learned). Each child gets a slightly different learning rate.
+5. Survivors stay unchanged, so a child has to beat its parent in the next tournament to stay.
+
+The leader is copied into the game as **Neural gym champion** after every round.
+
+```
+python engine/gym_tf.py start --population 8 --sizes small,medium --positions 2000000 --epochs 2
+python engine/gym_tf.py refine --rounds 5
+python engine/gym_tf.py status
+```
+
+- Run `run.bat` once first: the tournaments and self-play use the compiled Java engine.
+- Ctrl+C is safe at any point. Running the same command again continues.
+- Mixing sizes is useful: a bigger model judges better but searches less deeply, and the tournament shows
+  which trade-off actually wins.
+- Useful `refine` options: `--games 4` per pairing, `--time 250` ms per move, `--threads` (default: half
+  your cores), `--selfplay-games 100`, `--selfplay-depth 7`, `--keep 0.5`.
+- Time per round with the defaults (8 members): about 150 tournament games plus 400 self-play games. My
+  rough estimate for an 8-core PC is 1–2 hours a round; I haven't timed it on real models. Self-play is
+  the biggest cost: `--selfplay-games 40` or `--selfplay-depth 6` speeds it up.
+- Tournaments with only 4 games per pairing are noisy, so a lucky model can survive a round. More games
+  (`--games 8`) give fairer selection but slower rounds. `status` shows each round's leader and its score
+  against Classic engine, which is the number to watch: it should go up over the rounds.
+- Everything lives in `engine/models/tf-gym/` (not uploaded to git). Removed members are deleted to save space.
+
 ## GPU through WSL2 (optional)
 
 1. Install a current NVIDIA Windows driver. Then run `wsl --install -d Ubuntu` in PowerShell and restart.
@@ -128,6 +167,8 @@ Tested here, with short checks only and no real training:
 - Java evaluates exported models (and gym checkpoints) identically to Python.
 - The search's move generator matches the standard perft counts, and it finds mates and free pieces.
 - The whole data → model → game path works.
+- The gym: both stages ran on tiny synthetic data (from scratch and from a main model), including
+  tournaments, self-play, child fine-tuning, resuming after a stop, and the champion appearing in the game.
 
 Not tested: real Lichess downloads (blocked from my environment), real training runs, GPU training, and
 games against Stockfish. How strong the trained models play is for you to measure in step 5.

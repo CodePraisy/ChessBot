@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import handlers.Json;
 import rules.Move;
 import rules.Position;
 import rules.gameState;
@@ -28,7 +29,10 @@ import rules.gameState;
  *   java -cp "bin;src" ai.strengthTest --engine "Neural small" --puzzles engine/data/puzzles.csv --limit 400
  *   java -cp "bin;src" ai.strengthTest --league --games 4          (every trained model + Classic, round robin)
  *
- * Options: --time ms per move (default 1000), --games N (even; colours alternate on paired openings).
+ *   java -cp "bin;src" ai.strengthTest --league --models engine/models/tf-gym/population --threads 4 --json results.json
+ *
+ * Options: --time ms per move (default 1000), --games N (even; colours alternate on paired openings),
+ * --models folder of trained models (default engine/models/tf), --no-classic, --threads N (league only).
  */
 public final class strengthTest {
     private static final String[] OPENINGS = {
@@ -47,6 +51,14 @@ public final class strengthTest {
         public String name() { return engine.name(); }
         public Move move(gameState g, long timeMs) {
             searchEngine.result r = engine.think(nativeEngine.boardFor(g.current(), g.moves()), timeMs, 64);
+            return r.move() == 0 ? null : fastBoard.toMove(r.move());
+        }
+    }
+
+    /** A player with its own search, for games running in parallel. */
+    record searchPlayer(String name, searchEngine search) implements player {
+        public Move move(gameState g, long timeMs) {
+            searchEngine.result r = search.think(nativeEngine.boardFor(g.current(), g.moves()), timeMs, 64);
             return r.move() == 0 ? null : fastBoard.toMove(r.move());
         }
     }
@@ -99,11 +111,12 @@ public final class strengthTest {
 
     public static void main(String[] args) throws Exception {
         Map<String, String> opt = options(args);
-        Map<String, nativeEngine> engines = engines();
+        Map<String, nativeEngine> engines = opt.containsKey("models") ? engines(Path.of(opt.get("models")), !opt.containsKey("no-classic"), false) : engines();
         long time = Long.parseLong(opt.getOrDefault("time", "1000"));
         int games = Integer.parseInt(opt.getOrDefault("games", "20"));
         if (opt.containsKey("league")) {
-            league(engines, games, time, opt.containsKey("with-gym"));
+            int threads = Integer.parseInt(opt.getOrDefault("threads", "1"));
+            league(engines, games, time, opt.containsKey("with-gym"), threads, opt.containsKey("json") ? Path.of(opt.get("json")) : null);
             return;
         }
         if (opt.containsKey("list") || !opt.containsKey("engine")) {
@@ -127,30 +140,57 @@ public final class strengthTest {
     }
 
     /** Round robin between the trained models and Classic (optionally the gym too); prints a points table. */
-    static void league(Map<String, nativeEngine> engines, int games, long time, boolean withGym) throws Exception {
+    /**
+     * Round robin between the trained models and Classic (optionally the gym too); prints a points table.
+     * Pairings run on several threads when asked, each game with its own searches. --json writes the results.
+     */
+    static void league(Map<String, nativeEngine> engines, int games, long time, boolean withGym, int threads, Path json) throws Exception {
         List<nativeEngine> field = new ArrayList<>();
         for (nativeEngine e : engines.values()) if (withGym || !e.description().startsWith("self-play")) field.add(e);
         Map<String, Double> points = new LinkedHashMap<>();
         field.forEach(e -> points.put(e.name(), 0.0));
-        System.out.printf("League: %d engines, %d games per pairing, %d ms per move%n", field.size(), games, time);
+        System.out.printf("League: %d engines, %d games per pairing, %d ms per move, %d thread(s)%n", field.size(), games, time, threads);
+        List<Map<String, Object>> pairs = java.util.Collections.synchronizedList(new ArrayList<>());
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(Math.max(1, threads));
+        List<java.util.concurrent.Future<?>> jobs = new ArrayList<>();
         for (int i = 0; i < field.size(); i++)
             for (int j = i + 1; j < field.size(); j++) {
-                double s = match(new nativePlayer(field.get(i)), new nativePlayer(field.get(j)), games, time, false);
-                points.merge(field.get(i).name(), s * games, Double::sum);
-                points.merge(field.get(j).name(), (1 - s) * games, Double::sum);
+                nativeEngine a = field.get(i), b = field.get(j);
+                jobs.add(pool.submit(() -> {
+                    double s = match(new searchPlayer(a.name(), a.fresh()), new searchPlayer(b.name(), b.fresh()), games, time, false);
+                    synchronized (points) {
+                        points.merge(a.name(), s * games, Double::sum);
+                        points.merge(b.name(), (1 - s) * games, Double::sum);
+                    }
+                    pairs.add(Json.map("a", a.name(), "b", b.name(), "score", s, "games", (long) games));
+                    return null;
+                }));
             }
+        try { for (var job : jobs) job.get(); }
+        finally { pool.shutdownNow(); }
         System.out.println("\nStandings (points; each pairing has " + games + " games):");
-        points.entrySet().stream().sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .forEach(e -> System.out.printf("  %-24s %5.1f%n", e.getKey(), e.getValue()));
-        System.out.println("The game picks the most-trained model as the default; choose any of them in the AI menus.");
+        List<Map.Entry<String, Double>> table = new ArrayList<>(points.entrySet());
+        table.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+        table.forEach(e -> System.out.printf("  %-24s %5.1f%n", e.getKey(), e.getValue()));
+        if (json != null) {
+            List<Object> standings = new ArrayList<>();
+            for (var e : table) standings.add(Json.map("name", e.getKey(), "points", e.getValue(), "games", (long) games * (field.size() - 1)));
+            if (json.toAbsolutePath().getParent() != null) Files.createDirectories(json.toAbsolutePath().getParent());
+            Files.writeString(json, Json.write(Json.map("standings", standings, "pairs", new ArrayList<Object>(pairs),
+                    "games_per_pairing", (long) games, "ms_per_move", time)));
+        } else System.out.println("The game picks the most-trained model as the default; choose any of them in the AI menus.");
     }
 
     static Map<String, nativeEngine> engines() {
+        return engines(Path.of(System.getProperty("chessbot.models", "engine/models/tf")), true, true);
+    }
+
+    /** Trained models in one folder, optionally with Classic and the old gym survivors. */
+    static Map<String, nativeEngine> engines(Path models, boolean withClassic, boolean withGym) {
         Map<String, nativeEngine> out = new LinkedHashMap<>();
-        for (nativeEngine e : engineBootstrap.trainedModels(Path.of(System.getProperty("chessbot.models", "engine/models/tf"))))
-            out.put(e.name(), e);
-        nativeEngine classic = engineBootstrap.classic();
-        out.put(classic.name(), classic);
+        for (nativeEngine e : engineBootstrap.trainedModels(models)) out.put(e.name(), e);
+        if (withClassic) { nativeEngine classic = engineBootstrap.classic(); out.put(classic.name(), classic); }
+        if (!withGym) return out;
         engineRegistry.clear();
         engineBootstrap.installFrom(Path.of(System.getProperty("chessbot.gym", "engine/models/gym")));
         for (moveProvider p : engineRegistry.providers()) if (p instanceof nativeEngine n) out.put(n.name(), n);

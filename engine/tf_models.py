@@ -28,15 +28,17 @@ VERSION = 2
 MODELS = Path(__file__).resolve().parent / "models" / "tf"
 
 
-def build(size: str, seed: int = 0):
+def build(size: str, seed: int = 0, hidden: list[int] | None = None, l2: float = 0.0):
+    """A size from SIZES, or any hidden-layer list (the gym varies widths slightly)."""
     import tensorflow as tf
-    if size not in SIZES:
+    if hidden is None and size not in SIZES:
         raise ValueError(f"Unknown size {size!r}; choose from {', '.join(SIZES)}")
     tf.keras.utils.set_random_seed(seed)
     inputs = tf.keras.Input(shape=(FEATURES,), name="board")
     h = inputs
-    for i, units in enumerate(SIZES[size]):
-        h = tf.keras.layers.Dense(units, activation="relu", name=f"hidden{i}")(h)
+    regularizer = tf.keras.regularizers.L2(l2) if l2 > 0 else None
+    for i, units in enumerate(hidden or SIZES[size]):
+        h = tf.keras.layers.Dense(units, activation="relu", kernel_regularizer=regularizer, name=f"hidden{i}")(h)
     logit = tf.keras.layers.Dense(1, name="logit")(h)
     return tf.keras.Model(inputs, logit, name=f"chessbot_{size.replace('-', '_')}")
 

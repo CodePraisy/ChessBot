@@ -39,6 +39,9 @@ public final class nativeEngine implements moveProvider, analysisProvider {
         return search;
     }
 
+    /** A separate search with its own memory, so several games can run on different threads at once. */
+    public searchEngine fresh() throws Exception { return new searchEngine(source.load()); }
+
     @Override public String name() { return name; }
     public String description() { return description; }
     @Override public boolean isAvailable() { return search != null; }

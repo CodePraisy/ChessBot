@@ -33,3 +33,4 @@ Thumbs.db
 # Lichess training data, self-play data and trained TensorFlow models (large, regenerated locally)
 /engine/data/
 /engine/models/tf/
+/engine/models/tf-gym/
