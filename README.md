@@ -32,8 +32,10 @@ shorter is faster but plays weaker.
 **Ratings:** after a game, open **Review** and press **Analyze game**. Each side gets an accuracy and a
 game rating (an Elo-like estimate from how much each move lost against the best move). Your overall
 rating and each engine's is the average of its last 20 analysed games, shown next to engine names in the
-menus. The estimate is rough: it is most reliable with Stockfish installed, since full-strength Stockfish
-then does the analysis.
+menus. The formula is calibrated on games between Stockfish's fixed-Elo levels
+(1320-2900): averaged over games, each level rated within about 200 of its true Elo. A single game
+swings a lot, so trust the overall rating more. `java -cp "bin;src" ai.ratingCalibration` recalibrates
+on your own PC.
 
 ## Train your own
 

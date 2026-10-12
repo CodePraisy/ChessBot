@@ -28,7 +28,9 @@ public final class gameRating {
     public static final int RECENT = 20, MIN_MOVES = 5;
     public static final double ACPL_OFFSET = 10;
     /** Default fit; src/assets/rating-calibration.json (written by ai.ratingCalibration) overrides it. */
-    static final double DEFAULT_A = 3500, DEFAULT_B = -400; // PLACEHOLDER until fitted
+    // fitted to 54 games between Stockfish 16 levels 1320-2900 (108 game sides; level averages R^2 0.96),
+    // analysed like Review (full-strength Stockfish, 1.5 s a position). A single game is still +/- ~350.
+    static final double DEFAULT_A = 7630.5, DEFAULT_B = -1534.2;
     private static double[] fit;
 
     /** Elo estimate for one game's average centipawn loss. */

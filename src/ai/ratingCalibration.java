@@ -130,29 +130,38 @@ public final class ratingCalibration {
         }
     }
 
-    /** Least squares fit of elo = a + b * ln(acpl + 10) over every saved side with enough moves. */
+    /**
+     * Fits elo = a + b * ln(ACPL + 10) to each level's average, not to single games: one game is so noisy that a
+     * per-game fit squashes every rating towards the middle. The overall rating averages many games, so it is
+     * the average that should land on the right Elo.
+     */
     static void fit(Path csv, Path save) throws Exception {
-        List<double[]> pts = new ArrayList<>();
+        java.util.TreeMap<Integer, List<Double>> byLevel = new java.util.TreeMap<>();
+        int sides = 0;
         for (String line : Files.readAllLines(csv)) {
             String[] f = line.split(",");
             if (f.length < 6 || f[0].equals("elo") || Integer.parseInt(f[3]) < gameRating.MIN_MOVES) continue;
-            pts.add(new double[]{Math.log(Double.parseDouble(f[4]) + gameRating.ACPL_OFFSET), Double.parseDouble(f[0])});
+            byLevel.computeIfAbsent(Integer.valueOf(f[0]), k -> new ArrayList<>()).add(Math.log(Double.parseDouble(f[4]) + gameRating.ACPL_OFFSET));
+            sides++;
         }
-        if (pts.size() < 10) { System.out.println("Only " + pts.size() + " rated sides; play more games before fitting."); return; }
+        if (byLevel.size() < 3 || sides < 20) { System.out.println("Only " + sides + " rated sides over " + byLevel.size() + " levels; play more games."); return; }
+        List<double[]> pts = new ArrayList<>();
+        for (var e : byLevel.entrySet()) pts.add(new double[]{e.getValue().stream().mapToDouble(d -> d).average().orElse(0), e.getKey()});
         double mx = 0, my = 0;
         for (double[] p : pts) { mx += p[0]; my += p[1]; }
         mx /= pts.size(); my /= pts.size();
         double sxy = 0, sxx = 0, syy = 0;
         for (double[] p : pts) { sxy += (p[0] - mx) * (p[1] - my); sxx += (p[0] - mx) * (p[0] - mx); syy += (p[1] - my) * (p[1] - my); }
         double b = sxy / sxx, a = my - b * mx, r2 = sxy * sxy / (sxx * syy);
-        double err = 0;
-        for (double[] p : pts) err += Math.pow(p[1] - (a + b * p[0]), 2);
-        double rmse = Math.sqrt(err / pts.size());
-        System.out.printf(java.util.Locale.ROOT, "Fit over %d game sides: rating = %.1f %+.1f * ln(ACPL + %.0f) | R^2 %.2f | typical error per game +/-%.0f%n",
-                pts.size(), a, b, gameRating.ACPL_OFFSET, r2, rmse);
+        System.out.printf(java.util.Locale.ROOT, "Fit over %d game sides, %d levels: rating = %.1f %+.1f * ln(ACPL + %.0f) | R^2 %.3f%n",
+                sides, pts.size(), a, b, gameRating.ACPL_OFFSET, r2);
+        for (var e : byLevel.entrySet()) {
+            double avg = e.getValue().stream().mapToDouble(x -> a + b * x).average().orElse(0);
+            System.out.printf("  Stockfish %d -> average game rating %.0f over %d games%n", e.getKey(), avg, e.getValue().size());
+        }
         Files.createDirectories(save.toAbsolutePath().getParent());
-        Files.writeString(save, Json.pretty(Json.map("a", a, "b", b, "offset", gameRating.ACPL_OFFSET, "samples", (long) pts.size(),
-                "r2", r2, "rmse", rmse, "source", csv.toString())) + "\n");
+        Files.writeString(save, Json.pretty(Json.map("a", a, "b", b, "offset", gameRating.ACPL_OFFSET, "samples", (long) sides,
+                "levels", (long) pts.size(), "r2", r2, "source", csv.toString())) + "\n");
         System.out.println("Saved " + save + " (the game uses it from the next start)");
     }
 }
