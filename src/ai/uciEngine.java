@@ -26,15 +26,20 @@ public final class uciEngine implements moveProvider, analysisProvider {
     private final String name;
     private final Path exe;
     private final Integer elo;
+    private final long analysisMs;
     private final ExecutorService worker;
     private Process process;
     private BufferedReader in;
     private BufferedWriter out;
 
-    public uciEngine(String name, Path exe, Integer elo) {
+    public uciEngine(String name, Path exe, Integer elo) { this(name, exe, elo, 1500); }
+
+    /** analysisMs: thinking time per position when analysing (Review uses 1.5 s). */
+    public uciEngine(String name, Path exe, Integer elo, long analysisMs) {
         this.name = name;
         this.exe = exe;
         this.elo = elo;
+        this.analysisMs = analysisMs;
         worker = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "uci-" + name);
             t.setDaemon(true);
@@ -115,7 +120,7 @@ public final class uciEngine implements moveProvider, analysisProvider {
                 start();
                 send("setoption name MultiPV value " + Math.max(1, maxLines));
                 send("position fen " + pos.toFen());
-                send("go movetime 1500");
+                send("go movetime " + analysisMs);
                 java.util.Map<Integer, Suggestion> best = new java.util.TreeMap<>();
                 for (String line; (line = in.readLine()) != null; ) {
                     if (line.startsWith("bestmove")) break;
@@ -144,6 +149,13 @@ public final class uciEngine implements moveProvider, analysisProvider {
                 throw new IllegalStateException(name + ": " + e.getMessage(), e);
             }
         }, worker);
+    }
+
+    /** Ends the Stockfish process and the worker thread. */
+    public void close() {
+        try { if (process != null && process.isAlive()) send("quit"); } catch (IOException ignored) { }
+        if (process != null) process.destroy();
+        worker.shutdownNow();
     }
 
     @Override

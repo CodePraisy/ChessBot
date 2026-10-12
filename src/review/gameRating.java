@@ -16,8 +16,9 @@ import handlers.paths;
  *
  *  - Accuracy (0-100%): Lichess's formula. Each move's loss is measured in winning chances, so dropping
  *    50 centipawns in an equal position costs more than in a position that is already won.
- *  - Game rating: an Elo-like estimate from the average centipawn loss (ACPL), 3100 * e^(-ACPL / 100).
- *    It is a rough rule of thumb, not an official rating; it also depends on how strong the analysing engine is.
+ *  - Game rating: an Elo estimate from the average centipawn loss (ACPL): a + b * ln(ACPL + 10), with a and b
+ *    fitted to games between Stockfish's fixed-Elo levels (ai.ratingCalibration). A single game is noisy;
+ *    the overall rating averages many. It assumes Stockfish does the analysis, as in calibration.
  *  - Overall rating: the average game rating of a player's (or engine's) last 20 analysed games,
  *    kept in src/assets/saves/ratings.json. Each game counts once, however often it is analysed.
  */
@@ -25,6 +26,32 @@ public final class gameRating {
     private gameRating() {}
 
     public static final int RECENT = 20, MIN_MOVES = 5;
+    public static final double ACPL_OFFSET = 10;
+    /** Default fit; src/assets/rating-calibration.json (written by ai.ratingCalibration) overrides it. */
+    static final double DEFAULT_A = 3500, DEFAULT_B = -400; // PLACEHOLDER until fitted
+    private static double[] fit;
+
+    /** Elo estimate for one game's average centipawn loss. */
+    public static int ratingFor(double acpl) {
+        double[] ab = coefficients();
+        return (int) Math.round(Math.max(100, Math.min(3400, ab[0] + ab[1] * Math.log(acpl + ACPL_OFFSET))));
+    }
+
+    private static synchronized double[] coefficients() {
+        if (fit == null) {
+            fit = new double[]{DEFAULT_A, DEFAULT_B};
+            Path file = Path.of(paths.ASSETS, "rating-calibration.json");
+            try {
+                if (Files.isRegularFile(file)) {
+                    Map<String, Object> m = Json.parseObject(Files.readString(file, StandardCharsets.UTF_8));
+                    if (m.get("a") instanceof Number a && m.get("b") instanceof Number b) fit = new double[]{a.doubleValue(), b.doubleValue()};
+                }
+            } catch (Exception e) {
+                System.err.println("Ignoring " + file + ": " + e.getMessage());
+            }
+        }
+        return fit;
+    }
 
     /** One side's result for one game. */
     public record side(int moves, double accuracy, double acpl, int rating) {}
@@ -49,7 +76,7 @@ public final class gameRating {
             mean /= n;
             harmonic = n / harmonic;
             double acpl = lossSum / n;
-            int rating = (int) Math.round(Math.max(100, Math.min(3200, 3100 * Math.exp(-acpl / 100))));
+            int rating = ratingFor(acpl);
             return new side(n, (mean + harmonic) / 2, acpl, rating);
         }
     }
